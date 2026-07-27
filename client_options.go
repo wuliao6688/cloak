@@ -34,7 +34,16 @@ type TransportOptions struct {
 	MaxConnsPerHost     int
 	// MaxCachedTransports bounds the per-client host/protocol transport cache.
 	// Zero uses DefaultMaxCachedTransports; -1 keeps an unlimited cache.
-	MaxCachedTransports    int
+	MaxCachedTransports int
+	// TLSClientSessionCacheSize controls resumable TLS sessions retained by a
+	// client. Zero uses DefaultTLSClientSessionCacheSize.
+	TLSClientSessionCacheSize int
+	// ProtocolRacingHTTP2Delay controls how long an HTTP/2 attempt waits for
+	// HTTP/3. Nil uses DefaultProtocolRacingHTTP2Delay; zero starts immediately.
+	ProtocolRacingHTTP2Delay *time.Duration
+	// ProtocolRacingTimeout bounds the initial two-protocol race. Nil uses
+	// DefaultProtocolRacingTimeout.
+	ProtocolRacingTimeout  *time.Duration
 	MaxResponseHeaderBytes int64 // Zero means to use a default limit.
 	WriteBufferSize        int   // If zero, a default (currently 4KB) is used.
 	ReadBufferSize         int   // If zero, a default (currently 4KB) is used.
@@ -393,6 +402,14 @@ func cloneTransportOptions(transportOptions *TransportOptions) *TransportOptions
 	if transportOptions.IdleConnTimeout != nil {
 		idleConnTimeout := *transportOptions.IdleConnTimeout
 		clonedOptions.IdleConnTimeout = &idleConnTimeout
+	}
+	if transportOptions.ProtocolRacingHTTP2Delay != nil {
+		delay := *transportOptions.ProtocolRacingHTTP2Delay
+		clonedOptions.ProtocolRacingHTTP2Delay = &delay
+	}
+	if transportOptions.ProtocolRacingTimeout != nil {
+		timeout := *transportOptions.ProtocolRacingTimeout
+		clonedOptions.ProtocolRacingTimeout = &timeout
 	}
 	return &clonedOptions
 }

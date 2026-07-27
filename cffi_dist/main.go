@@ -23,6 +23,32 @@ var (
 	unsafePointersLck = sync.Mutex{}
 )
 
+// storeJSONResponse copies marshaled JSON directly into C-owned memory. This
+// avoids materializing a second payload-sized Go string before C.CString makes
+// its own copy. The returned pointer keeps the existing freeMemory ABI.
+func storeJSONResponse(responseID string, jsonResponse []byte) *C.char {
+	response := cStringFromBytes(jsonResponse)
+	if response == nil {
+		return nil
+	}
+
+	unsafePointersLck.Lock()
+	unsafePointers[responseID] = response
+	unsafePointersLck.Unlock()
+	return response
+}
+
+func cStringFromBytes(value []byte) *C.char {
+	buffer := C.malloc(C.size_t(len(value) + 1))
+	if buffer == nil {
+		return nil
+	}
+	bytes := unsafe.Slice((*byte)(buffer), len(value)+1)
+	copy(bytes, value)
+	bytes[len(value)] = 0
+	return (*C.char)(buffer)
+}
+
 //export freeMemory
 func freeMemory(responseId *C.char) {
 	responseIdString := C.GoString(responseId)
@@ -58,13 +84,7 @@ func destroyAll() *C.char {
 		return handleErrorResponse("", false, clientErr)
 	}
 
-	responseString := C.CString(string(jsonResponse))
-
-	unsafePointersLck.Lock()
-	unsafePointers[out.Id] = responseString
-	unsafePointersLck.Unlock()
-
-	return responseString
+	return storeJSONResponse(out.Id, jsonResponse)
 }
 
 //export destroySession
@@ -95,13 +115,7 @@ func destroySession(destroySessionParams *C.char) *C.char {
 		return handleErrorResponse(destroySessionInput.SessionId, true, clientErr)
 	}
 
-	responseString := C.CString(string(jsonResponse))
-
-	unsafePointersLck.Lock()
-	unsafePointers[out.Id] = responseString
-	unsafePointersLck.Unlock()
-
-	return responseString
+	return storeJSONResponse(out.Id, jsonResponse)
 }
 
 //export configureSessionCache
@@ -136,11 +150,7 @@ func configureSessionCache(configurationParams *C.char) *C.char {
 		return handleErrorResponse("", false, tls_client_cffi_src.NewTLSClientError(err))
 	}
 
-	responseString := C.CString(string(jsonResponse))
-	unsafePointersLck.Lock()
-	unsafePointers[out.Id] = responseString
-	unsafePointersLck.Unlock()
-	return responseString
+	return storeJSONResponse(out.Id, jsonResponse)
 }
 
 //export getCookiesFromSession
@@ -186,13 +196,7 @@ func getCookiesFromSession(getCookiesParams *C.char) *C.char {
 		return handleErrorResponse(cookiesInput.SessionId, true, clientErr)
 	}
 
-	responseString := C.CString(string(jsonResponse))
-
-	unsafePointersLck.Lock()
-	unsafePointers[out.Id] = responseString
-	unsafePointersLck.Unlock()
-
-	return responseString
+	return storeJSONResponse(out.Id, jsonResponse)
 }
 
 //export addCookiesToSession
@@ -240,13 +244,7 @@ func addCookiesToSession(addCookiesParams *C.char) *C.char {
 		return handleErrorResponse(cookiesInput.SessionId, true, clientErr)
 	}
 
-	responseString := C.CString(string(jsonResponse))
-
-	unsafePointersLck.Lock()
-	unsafePointers[out.Id] = responseString
-	unsafePointersLck.Unlock()
-
-	return responseString
+	return storeJSONResponse(out.Id, jsonResponse)
 }
 
 //export request
@@ -322,13 +320,7 @@ func request(requestParams *C.char) *C.char {
 		return handleErrorResponse(sessionId, withSession, clientErr)
 	}
 
-	responseString := C.CString(string(jsonResponse))
-
-	unsafePointersLck.Lock()
-	unsafePointers[response.Id] = responseString
-	unsafePointersLck.Unlock()
-
-	return responseString
+	return storeJSONResponse(response.Id, jsonResponse)
 }
 
 func handleErrorResponse(sessionId string, withSession bool, err *tls_client_cffi_src.TLSClientError) *C.char {
@@ -352,13 +344,7 @@ func handleErrorResponse(sessionId string, withSession bool, err *tls_client_cff
 		return errStr
 	}
 
-	responseString := C.CString(string(jsonResponse))
-
-	unsafePointersLck.Lock()
-	unsafePointers[response.Id] = responseString
-	unsafePointersLck.Unlock()
-
-	return responseString
+	return storeJSONResponse(response.Id, jsonResponse)
 }
 
 func buildCookies(cookies []tls_client_cffi_src.Cookie) []*http.Cookie {

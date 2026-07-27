@@ -20,6 +20,7 @@ import (
 
 const defaultIdleConnectionTimeout = 90 * time.Second
 const CHROME_MAX_FIELD_SECTION_SIZE = 262144
+const DefaultTLSClientSessionCacheSize = 32
 
 var errProtocolNegotiated = errors.New("protocol negotiated")
 
@@ -774,7 +775,7 @@ func newRoundTripper(clientProfile profiles.ClientProfile, transportOptions *Tra
 	withSessionResumption := supportsSessionResumption(clientProfile.GetClientHelloId())
 
 	if withSessionResumption {
-		clientSessionCache = tls.NewLRUClientSessionCache(32)
+		clientSessionCache = tls.NewLRUClientSessionCache(tlsClientSessionCacheSize(transportOptions))
 	}
 
 	selectedDialer := proxy.ContextDialer(proxy.Direct)
@@ -866,4 +867,11 @@ func maxCachedTransports(options *TransportOptions) int {
 		return 0
 	}
 	return options.MaxCachedTransports
+}
+
+func tlsClientSessionCacheSize(options *TransportOptions) int {
+	if options == nil || options.TLSClientSessionCacheSize == 0 {
+		return DefaultTLSClientSessionCacheSize
+	}
+	return options.TLSClientSessionCacheSize
 }

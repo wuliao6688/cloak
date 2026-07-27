@@ -1,0 +1,16 @@
+.idea/
+.vscode/
+.DS_Store
+
+# Go build and test artifacts
+*.exe
+*.test
+*.out
+coverage.*
+
+# CFFI build artifacts
+cffi_dist/dist/
+*.dll
+*.dylib
+*.so
+*.h

@@ -3,6 +3,7 @@ package tls_client
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -146,6 +147,59 @@ func BenchmarkTransportCacheHitParallel(b *testing.B) {
 			}
 		}
 	})
+}
+
+func BenchmarkHTTP2DialContextRegistrationParallel(b *testing.B) {
+	rt := &roundTripper{
+		http2DialContexts: make(map[string]map[uint64]context.Context),
+		http2DialCancels:  make(map[string]map[uint64]context.CancelFunc),
+	}
+	ctx := context.Background()
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			release := rt.registerHTTP2DialContext("example.com:443", ctx)
+			release()
+		}
+	})
+}
+
+func TestTransportCacheConcurrentHitsAndEvictions(t *testing.T) {
+	rt := &roundTripper{
+		cachedTransports: make(map[string]http.RoundTripper),
+		transportCache:   newTransportCacheMeta(8),
+	}
+	for i := 0; i < 8; i++ {
+		rt.setCachedTransport(fmt.Sprintf("seed-%d", i), &closeIdleTrackingTransport{})
+	}
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for worker := 0; worker < 8; worker++ {
+		wg.Add(1)
+		go func(offset int) {
+			defer wg.Done()
+			<-start
+			for i := 0; i < 1000; i++ {
+				_, _ = rt.getCachedTransport(fmt.Sprintf("seed-%d", (i+offset)%8))
+			}
+		}(worker)
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 1000; i++ {
+			rt.setCachedTransport(fmt.Sprintf("churn-%d", i), &closeIdleTrackingTransport{})
+		}
+	}()
+
+	close(start)
+	wg.Wait()
+
+	if len(rt.cachedTransports) > 8 {
+		t.Fatalf("transport cache exceeded its configured capacity: %d", len(rt.cachedTransports))
+	}
 }
 
 func TestHTTP3LRUEvictionWaitsForActiveResponseBody(t *testing.T) {

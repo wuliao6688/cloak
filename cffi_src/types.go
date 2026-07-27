@@ -152,16 +152,19 @@ type CandidateCipherSuite struct {
 type TransportOptions struct {
 	// IdleConnTimeout is the maximum amount of time an idle (keep-alive)
 	// connection will remain idle before closing itself. Zero means no limit.
-	IdleConnTimeout        *time.Duration `json:"idleConnTimeout"`
-	MaxIdleConns           int            `json:"maxIdleConns"`
-	MaxIdleConnsPerHost    int            `json:"maxIdleConnsPerHost"`
-	MaxConnsPerHost        int            `json:"maxConnsPerHost"`
-	MaxCachedTransports    int            `json:"maxCachedTransports"`
-	MaxResponseHeaderBytes int64          `json:"maxResponseHeaderBytes"` // Zero means to use a default limit.
-	WriteBufferSize        int            `json:"writeBufferSize"`        // If zero, a default (currently 4KB) is used.
-	ReadBufferSize         int            `json:"readBufferSize"`         // If zero, a default (currently 4KB) is used.
-	DisableKeepAlives      bool           `json:"disableKeepAlives"`
-	DisableCompression     bool           `json:"disableCompression"`
+	IdleConnTimeout           *time.Duration `json:"idleConnTimeout"`
+	MaxIdleConns              int            `json:"maxIdleConns"`
+	MaxIdleConnsPerHost       int            `json:"maxIdleConnsPerHost"`
+	MaxConnsPerHost           int            `json:"maxConnsPerHost"`
+	MaxCachedTransports       int            `json:"maxCachedTransports"`
+	TLSClientSessionCacheSize int            `json:"tlsClientSessionCacheSize"`
+	ProtocolRacingHTTP2Delay  *time.Duration `json:"protocolRacingHttp2Delay"`
+	ProtocolRacingTimeout     *time.Duration `json:"protocolRacingTimeout"`
+	MaxResponseHeaderBytes    int64          `json:"maxResponseHeaderBytes"` // Zero means to use a default limit.
+	WriteBufferSize           int            `json:"writeBufferSize"`        // If zero, a default (currently 4KB) is used.
+	ReadBufferSize            int            `json:"readBufferSize"`         // If zero, a default (currently 4KB) is used.
+	DisableKeepAlives         bool           `json:"disableKeepAlives"`
+	DisableCompression        bool           `json:"disableCompression"`
 }
 
 type PriorityFrames struct {

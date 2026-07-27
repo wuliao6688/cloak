@@ -60,6 +60,29 @@ func TestProtocolRaceEligibility(t *testing.T) {
 	}
 }
 
+func TestProtocolRacingTimingDefaultsAndOverrides(t *testing.T) {
+	pr := &protocolRacer{}
+	if got := pr.http2Delay(); got != DefaultProtocolRacingHTTP2Delay {
+		t.Fatalf("unexpected default HTTP/2 delay: %v", got)
+	}
+	if got := pr.racingTimeout(); got != DefaultProtocolRacingTimeout {
+		t.Fatalf("unexpected default racing timeout: %v", got)
+	}
+
+	delay := 25 * time.Millisecond
+	timeout := 2 * time.Second
+	pr.transportOptions = &TransportOptions{
+		ProtocolRacingHTTP2Delay: &delay,
+		ProtocolRacingTimeout:    &timeout,
+	}
+	if got := pr.http2Delay(); got != delay {
+		t.Fatalf("unexpected configured HTTP/2 delay: %v", got)
+	}
+	if got := pr.racingTimeout(); got != timeout {
+		t.Fatalf("unexpected configured racing timeout: %v", got)
+	}
+}
+
 func TestTransportEvictionOnlyClearsMatchingProtocol(t *testing.T) {
 	const addr = "example.com:443"
 	racer := &protocolRacer{protocolCache: map[string]string{addr: "h3"}}

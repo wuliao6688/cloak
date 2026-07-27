@@ -189,6 +189,15 @@ func validateConfig(config *httpClientConfig) error {
 	if config.transportOptions != nil && config.transportOptions.MaxCachedTransports < -1 {
 		return fmt.Errorf("invalid config: max cached transports must be -1, zero, or a positive value")
 	}
+	if config.transportOptions != nil && config.transportOptions.TLSClientSessionCacheSize < 0 {
+		return fmt.Errorf("invalid config: TLS client session cache size must be zero or a positive value")
+	}
+	if config.transportOptions != nil && config.transportOptions.ProtocolRacingHTTP2Delay != nil && *config.transportOptions.ProtocolRacingHTTP2Delay < 0 {
+		return fmt.Errorf("invalid config: protocol racing HTTP/2 delay must not be negative")
+	}
+	if config.transportOptions != nil && config.transportOptions.ProtocolRacingTimeout != nil && *config.transportOptions.ProtocolRacingTimeout <= 0 {
+		return fmt.Errorf("invalid config: protocol racing timeout must be positive")
+	}
 
 	if config.disableIPV4 && config.disableIPV6 {
 		return fmt.Errorf("invalid config: cannot disable both IPv4 and IPv6")

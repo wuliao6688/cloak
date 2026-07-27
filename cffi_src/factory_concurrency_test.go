@@ -276,6 +276,38 @@ func TestSessionCacheExpiresIdleSessions(t *testing.T) {
 	}
 }
 
+func TestSessionCacheTTLPruningIsThrottledUntilDeadline(t *testing.T) {
+	ClearSessionCache()
+	oldMax, oldTTL := SessionCacheConfiguration()
+	defer func() {
+		ClearSessionCache()
+		if err := ConfigureSessionCache(oldMax, oldTTL); err != nil {
+			t.Errorf("failed to restore session cache configuration: %v", err)
+		}
+	}()
+	if err := ConfigureSessionCache(-1, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Unix(1_000_000, 0)
+	sessionCacheNextPrune.Store(now.Add(time.Hour).UnixNano())
+	before := sessionCachePruneScans.Load()
+	for i := 0; i < 1000; i++ {
+		if evicted := pruneSessionCacheIfNeeded(now, ""); len(evicted) != 0 {
+			t.Fatal("empty cache unexpectedly evicted a client")
+		}
+	}
+	if after := sessionCachePruneScans.Load(); after != before {
+		t.Fatalf("TTL cache scanned before its deadline: before=%d after=%d", before, after)
+	}
+
+	sessionCacheNextPrune.Store(now.Add(-time.Nanosecond).UnixNano())
+	_ = pruneSessionCacheIfNeeded(now, "")
+	if after := sessionCachePruneScans.Load(); after != before+1 {
+		t.Fatalf("due TTL cache should scan exactly once: before=%d after=%d", before, after)
+	}
+}
+
 func TestSessionCacheCapacityDoesNotEvictLeasedSession(t *testing.T) {
 	ClearSessionCache()
 	oldMax, oldTTL := SessionCacheConfiguration()

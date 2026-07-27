@@ -70,6 +70,7 @@ func ClearSessionCache() {
 	clientsLock.Lock()
 	oldClients := clients
 	clients = make(map[string]*sessionClientEntry)
+	sessionCacheNextPrune.Store(0)
 	clientsLock.Unlock()
 	sessionLifecycleLock.Unlock()
 
@@ -489,16 +490,19 @@ func getTlsClient(requestInput RequestInput, sessionId string, withSession bool)
 
 	if requestInput.TransportOptions != nil {
 		transportOptions := &tls_client.TransportOptions{
-			DisableKeepAlives:      requestInput.TransportOptions.DisableKeepAlives,
-			DisableCompression:     requestInput.TransportOptions.DisableCompression,
-			MaxIdleConns:           requestInput.TransportOptions.MaxIdleConns,
-			MaxIdleConnsPerHost:    requestInput.TransportOptions.MaxIdleConnsPerHost,
-			MaxConnsPerHost:        requestInput.TransportOptions.MaxConnsPerHost,
-			MaxCachedTransports:    requestInput.TransportOptions.MaxCachedTransports,
-			MaxResponseHeaderBytes: requestInput.TransportOptions.MaxResponseHeaderBytes,
-			WriteBufferSize:        requestInput.TransportOptions.WriteBufferSize,
-			ReadBufferSize:         requestInput.TransportOptions.ReadBufferSize,
-			IdleConnTimeout:        requestInput.TransportOptions.IdleConnTimeout,
+			DisableKeepAlives:         requestInput.TransportOptions.DisableKeepAlives,
+			DisableCompression:        requestInput.TransportOptions.DisableCompression,
+			MaxIdleConns:              requestInput.TransportOptions.MaxIdleConns,
+			MaxIdleConnsPerHost:       requestInput.TransportOptions.MaxIdleConnsPerHost,
+			MaxConnsPerHost:           requestInput.TransportOptions.MaxConnsPerHost,
+			MaxCachedTransports:       requestInput.TransportOptions.MaxCachedTransports,
+			TLSClientSessionCacheSize: requestInput.TransportOptions.TLSClientSessionCacheSize,
+			ProtocolRacingHTTP2Delay:  requestInput.TransportOptions.ProtocolRacingHTTP2Delay,
+			ProtocolRacingTimeout:     requestInput.TransportOptions.ProtocolRacingTimeout,
+			MaxResponseHeaderBytes:    requestInput.TransportOptions.MaxResponseHeaderBytes,
+			WriteBufferSize:           requestInput.TransportOptions.WriteBufferSize,
+			ReadBufferSize:            requestInput.TransportOptions.ReadBufferSize,
+			IdleConnTimeout:           requestInput.TransportOptions.IdleConnTimeout,
 			// RootCAs:                requestInput.TransportOptions.RootCAs,
 		}
 

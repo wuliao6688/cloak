@@ -31,6 +31,9 @@ var (
 	sessionCacheMaxEntries = DefaultMaxSessionCacheEntries
 	sessionCacheTTL        = DefaultSessionCacheTTL
 	sessionCacheSequence   atomic.Uint64
+	sessionCacheNextPrune  atomic.Int64
+	sessionCachePruneBusy  atomic.Bool
+	sessionCachePruneScans atomic.Uint64
 )
 
 func init() {
@@ -177,15 +180,41 @@ func sessionEntryExpired(entry *sessionClientEntry, now time.Time, idleTTL time.
 // aware prune, and enabling TTL keeps the existing expiration behavior.
 func pruneSessionCacheIfNeeded(now time.Time, protectedSessionID string) []tls_client.HttpClient {
 	maxEntries, idleTTL := SessionCacheConfiguration()
-	if idleTTL <= 0 {
-		clientsLock.RLock()
-		withinCapacity := maxEntries < 0 || len(clients) <= maxEntries
-		clientsLock.RUnlock()
-		if withinCapacity {
+	clientsLock.RLock()
+	capacityExceeded := maxEntries >= 0 && len(clients) > maxEntries
+	clientsLock.RUnlock()
+
+	ttlPruneDue := idleTTL > 0 && sessionCacheTTLPruneDue(now, idleTTL)
+	if !capacityExceeded && !ttlPruneDue {
+		return nil
+	}
+
+	ownsTTLPrune := false
+	if ttlPruneDue {
+		ownsTTLPrune = sessionCachePruneBusy.CompareAndSwap(false, true)
+		if !ownsTTLPrune && !capacityExceeded {
 			return nil
 		}
 	}
+	if ownsTTLPrune {
+		defer sessionCachePruneBusy.Store(false)
+	}
 	return pruneSessionCache(now, protectedSessionID)
+}
+
+// sessionCacheTTLPruneDue arms one deadline for the cache instead of scanning
+// every session after every request. A full scan publishes the next actual
+// expiry; a newly enabled or empty cache starts with one TTL-sized interval.
+func sessionCacheTTLPruneDue(now time.Time, idleTTL time.Duration) bool {
+	for {
+		nextPrune := sessionCacheNextPrune.Load()
+		if nextPrune != 0 {
+			return now.UnixNano() >= nextPrune
+		}
+		if sessionCacheNextPrune.CompareAndSwap(0, now.Add(idleTTL).UnixNano()) {
+			return false
+		}
+	}
 }
 
 // pruneSessionCache removes expired and least-recently-used sessions while
@@ -193,6 +222,7 @@ func pruneSessionCacheIfNeeded(now time.Time, protectedSessionID string) []tls_c
 // protected session are skipped, so pruning never changes a live request's
 // proxy, cookies, or transport.
 func pruneSessionCache(now time.Time, protectedSessionID string) []tls_client.HttpClient {
+	sessionCachePruneScans.Add(1)
 	maxEntries, idleTTL := SessionCacheConfiguration()
 	sessionLocksLock.Lock()
 	clientsLock.Lock()
@@ -230,9 +260,40 @@ func pruneSessionCache(now time.Time, protectedSessionID string) []tls_client.Ht
 		delete(clients, oldestSessionID)
 	}
 
+	updateNextSessionCachePruneLocked(now, idleTTL)
+
 	clientsLock.Unlock()
 	sessionLocksLock.Unlock()
 	return evicted
+}
+
+func updateNextSessionCachePruneLocked(now time.Time, idleTTL time.Duration) {
+	if idleTTL <= 0 || len(clients) == 0 {
+		sessionCacheNextPrune.Store(0)
+		return
+	}
+
+	retryAt := now.Add(sessionCacheBusyRetryDelay(idleTTL))
+	var nextExpiry time.Time
+	for _, entry := range clients {
+		lastUsed, _ := sessionEntryMetadata(entry)
+		expiresAt := lastUsed.Add(idleTTL)
+		if !expiresAt.After(now) {
+			expiresAt = retryAt
+		}
+		if nextExpiry.IsZero() || expiresAt.Before(nextExpiry) {
+			nextExpiry = expiresAt
+		}
+	}
+	sessionCacheNextPrune.Store(nextExpiry.UnixNano())
+}
+
+func sessionCacheBusyRetryDelay(idleTTL time.Duration) time.Duration {
+	const maxRetryDelay = time.Second
+	if idleTTL < maxRetryDelay {
+		return idleTTL
+	}
+	return maxRetryDelay
 }
 
 func closeSessionClients(clients []tls_client.HttpClient) {

@@ -14,6 +14,11 @@ import (
 	tls "github.com/bogdanfinn/utls"
 )
 
+const (
+	DefaultProtocolRacingHTTP2Delay = 300 * time.Millisecond
+	DefaultProtocolRacingTimeout    = 10 * time.Second
+)
+
 type protocolRacer struct {
 	protocolCache   map[string]string
 	protocolCacheMu sync.RWMutex
@@ -230,7 +235,7 @@ func (pr *protocolRacer) deleteCachedTransport(key string) http.RoundTripper {
 
 func (pr *protocolRacer) startRace(req *http.Request, addr string, getTransportFunc func(*http.Request, string) error) (*http.Response, error) {
 	resultCh := make(chan racingResult, 2)
-	waitCtx, stopWaitTimer := context.WithTimeout(req.Context(), 10*time.Second)
+	waitCtx, stopWaitTimer := context.WithTimeout(req.Context(), pr.racingTimeout())
 	defer stopWaitTimer()
 
 	h3Ctx, cancelHTTP3 := context.WithCancel(req.Context())
@@ -288,9 +293,9 @@ func (pr *protocolRacer) attemptHTTP3(req *http.Request, resultCh chan<- racingR
 }
 
 func (pr *protocolRacer) attemptHTTP2(ctx context.Context, req *http.Request, addr string, getTransportFunc func(*http.Request, string) error, resultCh chan<- racingResult) {
-	// Chrome-like 300ms delay before starting HTTP/2
+	// Chrome-like delay before starting HTTP/2. The default remains 300ms.
 	// https://groups.google.com/a/chromium.org/g/proto-quic/c/igD7dLSct24
-	timer := time.NewTimer(300 * time.Millisecond)
+	timer := time.NewTimer(pr.http2Delay())
 	defer timer.Stop()
 	select {
 	case <-timer.C:
@@ -535,6 +540,20 @@ func (pr *protocolRacer) getHTTP3Config() *http3Config {
 		http3PseudoHeaderOrder: pr.http3PseudoHeaderOrder,
 		http3SendGreaseFrames:  pr.http3SendGreaseFrames,
 	}
+}
+
+func (pr *protocolRacer) http2Delay() time.Duration {
+	if pr.transportOptions != nil && pr.transportOptions.ProtocolRacingHTTP2Delay != nil {
+		return *pr.transportOptions.ProtocolRacingHTTP2Delay
+	}
+	return DefaultProtocolRacingHTTP2Delay
+}
+
+func (pr *protocolRacer) racingTimeout() time.Duration {
+	if pr.transportOptions != nil && pr.transportOptions.ProtocolRacingTimeout != nil {
+		return *pr.transportOptions.ProtocolRacingTimeout
+	}
+	return DefaultProtocolRacingTimeout
 }
 
 type racingResult struct {

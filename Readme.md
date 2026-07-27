@@ -221,6 +221,7 @@ client, err := tls_client.NewHttpClient(nil,
 - 不能与 `WithForceHttp1` 或 `WithDisableHttp3` 同时使用，否则客户端构建失败；
 - 不能与 HTTP/HTTPS/SOCKS 代理、自定义 TCP DialContext、本地地址、IPv4/IPv6 限制、证书 Pinning 或带宽统计同时使用；当前实现会拒绝这些组合，避免 QUIC 连接绕过配置；
 - HTTP/3 立即尝试，HTTP/2 在可取消的 300ms 延迟后尝试；
+- 可通过 `TransportOptions.ProtocolRacingHTTP2Delay` 和 `TransportOptions.ProtocolRacingTimeout` 调整竞速延迟与总等待时间；nil 保持 300ms/10s 默认值；
 - 只有 `GET`、`HEAD`、`OPTIONS` 会参与竞速；
 - 有请求体时必须提供 `GetBody`，确保 HTTP/2 与 HTTP/3 使用独立副本；
 - POST 等非安全请求不会进入双协议竞速，只发送一次；没有协议缓存时走 HTTP/2，已有缓存时可以复用单一已知协议；
@@ -237,7 +238,8 @@ client, err := tls_client.NewHttpClient(nil,
 - `SetFollowRedirect`：为后续请求切换新的客户端状态，不修改正在使用的客户端快照；
 - `SetCookieJar`：切换新 Jar，已开始的请求继续使用自己的快照；
 - Transport 初始化按目标地址单飞，TLS 握手期间不会持有全局 map 锁；
-- Transport 缓存使用 LRU 上限，默认每个 Client 最多 256 个 host/protocol 条目；可通过 `TransportOptions.MaxCachedTransports` 调整，`-1` 保留无限缓存；被驱逐的 HTTP/3 Transport 会等活动响应体 EOF/Close 后再关闭；
+- Transport 缓存使用 LRU 上限，默认每个 Client 最多 256 个 host/protocol 条目；缓存命中只持有共享读锁并通过原子序列更新访问时间，不会让同一热门 host 的读请求因 LRU 记账串行；可通过 `TransportOptions.MaxCachedTransports` 调整，`-1` 保留无限缓存；被驱逐的 HTTP/3 Transport 会等活动响应体 EOF/Close 后再关闭；
+- 支持恢复的画像默认保留 32 个 TLS session；可通过 `TransportOptions.TLSClientSessionCacheSize` 调整，`0` 使用默认值；
 - HTTP/2 重连握手继承当前等待该 host 的请求 context；只有所有相关请求都取消时，共享握手才会被取消；
 - Header 和画像配置对外返回或接收时尽量使用防御性副本。
 
@@ -251,7 +253,7 @@ client, err := tls_client.NewHttpClient(nil,
 - `RemoveSession` 与 `ClearSessionCache` 会等待相关 session 操作完成，再在长临界区之外关闭连接；
 - session 创建失败不会写入空客户端；
 - session 缓存默认最多保留 1024 个条目并按 LRU 回收；正在执行或等待 flight 的 session 不会被驱逐；
-- idle TTL 默认关闭，可通过 Go API `tls_client_cffi_src.ConfigureSessionCache` 或环境变量 `TLS_CLIENT_SESSION_CACHE_TTL=30m` 启用；`TLS_CLIENT_SESSION_CACHE_MAX_ENTRIES=-1` 可恢复无限容量。
+- idle TTL 默认关闭，可通过 Go API `tls_client_cffi_src.ConfigureSessionCache` 或环境变量 `TLS_CLIENT_SESSION_CACHE_TTL=30m` 启用；启用后使用下一到期时间触发单飞清理，不会在每个请求完成时扫描全部 session；`TLS_CLIENT_SESSION_CACHE_MAX_ENTRIES=-1` 可恢复无限容量。
 
 ## WebSocket
 
@@ -306,9 +308,9 @@ CFFI 入口位于 [`cffi_dist`](./cffi_dist)，请求构建和 session 管理位
 CFFI 请求可设置 `maxResponseBodyBytes` 限制内存响应大小；设置
 `streamOutputPath` 时同样会限制写入文件的响应字节数。`streamOutputBlockSize`
 默认使用 32 KiB，显式设置时必须为正数且不超过 16 MiB。字节响应会直接流式
-编码到最终 Base64 data URL，避免为大型响应额外构造未使用的原始字符串副本。
+编码到最终 Base64 data URL，避免为大型响应额外构造未使用的原始字符串副本。最终 JSON 会直接复制到 C 持有的返回缓冲区，不再先构造一份同等大小的 Go 字符串；调用方仍须按原有 ABI 使用 `freeMemory` 释放结果。
 
-`transportOptions.maxCachedTransports` 控制单个 CFFI Client 的 Transport LRU 上限：`0` 使用默认 256，`-1` 表示不限制。CFFI session 缓存可在进程启动前配置：
+`transportOptions.maxCachedTransports` 控制单个 CFFI Client 的 Transport LRU 上限：`0` 使用默认 256，`-1` 表示不限制。`transportOptions.tlsClientSessionCacheSize` 控制单个 Client 的 TLS session 缓存容量，`0` 使用默认 32。`transportOptions.protocolRacingHttp2Delay` 和 `transportOptions.protocolRacingTimeout` 使用 Go duration 的纳秒 JSON 数值；省略时保持默认竞速时序。CFFI session 缓存可在进程启动前配置：
 
 ```text
 TLS_CLIENT_SESSION_CACHE_MAX_ENTRIES=1024

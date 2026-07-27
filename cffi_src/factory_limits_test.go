@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/stretchr/testify/require"
@@ -59,5 +60,25 @@ func BenchmarkEncodeByteResponse1MiB(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		_ = encodeByteResponse(body)
+	}
+}
+
+func BenchmarkSessionCacheTTLPruneFastPath(b *testing.B) {
+	ClearSessionCache()
+	oldMax, oldTTL := SessionCacheConfiguration()
+	b.Cleanup(func() {
+		ClearSessionCache()
+		_ = ConfigureSessionCache(oldMax, oldTTL)
+	})
+	if err := ConfigureSessionCache(-1, time.Hour); err != nil {
+		b.Fatal(err)
+	}
+	now := time.Unix(1_000_000, 0)
+	sessionCacheNextPrune.Store(now.Add(time.Hour).UnixNano())
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = pruneSessionCacheIfNeeded(now, "")
 	}
 }

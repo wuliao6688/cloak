@@ -5,6 +5,7 @@ import (
 	"io"
 	"reflect"
 	"sync"
+	"sync/atomic"
 
 	http "github.com/bogdanfinn/fhttp"
 )
@@ -137,8 +138,8 @@ func (b *releaseTransportBody) Close() error {
 }
 
 type transportCacheMeta struct {
-	lastUsed   map[string]uint64
-	sequence   uint64
+	lastUsed   map[string]*atomic.Uint64
+	sequence   atomic.Uint64
 	maxEntries int
 }
 
@@ -153,21 +154,38 @@ func newTransportCacheMeta(maxEntries int) *transportCacheMeta {
 		maxEntries = DefaultMaxCachedTransports
 	}
 	return &transportCacheMeta{
-		lastUsed:   make(map[string]uint64),
+		lastUsed:   make(map[string]*atomic.Uint64),
 		maxEntries: maxEntries,
 	}
 }
 
 func getCachedTransportEntry(items map[string]http.RoundTripper, lock *sync.RWMutex, meta *transportCacheMeta, key string) (http.RoundTripper, bool) {
-	lock.Lock()
-	defer lock.Unlock()
+	lock.RLock()
+	defer lock.RUnlock()
 
 	transport, ok := items[key]
 	if ok && meta != nil {
-		meta.sequence++
-		meta.lastUsed[key] = meta.sequence
+		touchTransportCacheEntry(meta, key)
 	}
 	return transport, ok
+}
+
+// touchTransportCacheEntry records recency without upgrading the cache read
+// lock to a write lock. The monotonic max update prevents two concurrent hits
+// from publishing an older sequence after a newer one.
+func touchTransportCacheEntry(meta *transportCacheMeta, key string) {
+	lastUsed := meta.lastUsed[key]
+	if lastUsed == nil {
+		return
+	}
+
+	sequence := meta.sequence.Add(1)
+	for {
+		previous := lastUsed.Load()
+		if previous >= sequence || lastUsed.CompareAndSwap(previous, sequence) {
+			return
+		}
+	}
 }
 
 func setCachedTransportEntry(items map[string]http.RoundTripper, lock *sync.RWMutex, meta *transportCacheMeta, key string, transport http.RoundTripper) []evictedTransport {
@@ -183,16 +201,23 @@ func setCachedTransportEntry(items map[string]http.RoundTripper, lock *sync.RWMu
 	items[key] = transport
 
 	if meta != nil {
-		meta.sequence++
-		meta.lastUsed[key] = meta.sequence
+		lastUsed := meta.lastUsed[key]
+		if lastUsed == nil {
+			lastUsed = &atomic.Uint64{}
+			meta.lastUsed[key] = lastUsed
+		}
+		lastUsed.Store(meta.sequence.Add(1))
 		for meta.maxEntries >= 0 && len(items) > meta.maxEntries {
 			oldestKey := ""
 			oldestSequence := ^uint64(0)
 			for candidate := range items {
-				lastUsed := meta.lastUsed[candidate]
-				if lastUsed < oldestSequence {
+				candidateLastUsed := uint64(0)
+				if access := meta.lastUsed[candidate]; access != nil {
+					candidateLastUsed = access.Load()
+				}
+				if candidateLastUsed < oldestSequence {
 					oldestKey = candidate
-					oldestSequence = lastUsed
+					oldestSequence = candidateLastUsed
 				}
 			}
 			if oldestKey == "" {
@@ -251,6 +276,6 @@ func resetTransportCacheMeta(meta *transportCacheMeta) {
 	if meta == nil {
 		return
 	}
-	meta.lastUsed = make(map[string]uint64)
-	meta.sequence = 0
+	meta.lastUsed = make(map[string]*atomic.Uint64)
+	meta.sequence.Store(0)
 }
