@@ -158,10 +158,19 @@ func BenchmarkHTTP2DialContextRegistrationParallel(b *testing.B) {
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			release := rt.registerHTTP2DialContext("example.com:443", ctx)
-			release()
+			registration := rt.registerHTTP2DialContext("example.com:443", ctx)
+			registration.release()
 		}
 	})
+}
+
+func TestHTTP2DialContextRegistrationSkipsCancellationWatchForBackground(t *testing.T) {
+	rt := &roundTripper{}
+	registration := rt.registerHTTP2DialContext("example.com:443", context.Background())
+	if registration.stopCancellationWatch != nil {
+		t.Fatal("background context installed an unnecessary cancellation watch")
+	}
+	registration.release()
 }
 
 func TestTransportCacheConcurrentHitsAndEvictions(t *testing.T) {
@@ -281,11 +290,11 @@ func TestHTTP2RedialUsesActiveRequestContext(t *testing.T) {
 		dialer:            &contextErrorDialer{},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	release := rt.registerHTTP2DialContext("example.com:443", ctx)
+	registration := rt.registerHTTP2DialContext("example.com:443", ctx)
 	cancel()
 
 	_, err := rt.dialTLSHTTP2("tcp", "example.com:443", nil)
-	release()
+	registration.release()
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("HTTP/2 redial did not inherit request cancellation: %v", err)
 	}
@@ -295,10 +304,10 @@ func TestHTTP2SharedDialCancelsOnlyAfterAllWaitingRequests(t *testing.T) {
 	rt := &roundTripper{}
 	firstContext, cancelFirst := context.WithCancel(context.Background())
 	secondContext, cancelSecond := context.WithCancel(context.Background())
-	releaseFirst := rt.registerHTTP2DialContext("example.com:443", firstContext)
-	releaseSecond := rt.registerHTTP2DialContext("example.com:443", secondContext)
-	defer releaseFirst()
-	defer releaseSecond()
+	firstRegistration := rt.registerHTTP2DialContext("example.com:443", firstContext)
+	secondRegistration := rt.registerHTTP2DialContext("example.com:443", secondContext)
+	defer firstRegistration.release()
+	defer secondRegistration.release()
 
 	combined, cancelCombined := rt.contextForHTTP2Dial("example.com:443")
 	defer cancelCombined()
@@ -320,15 +329,15 @@ func TestHTTP2SharedDialCancelsOnlyAfterAllWaitingRequests(t *testing.T) {
 func TestHTTP2SharedDialIncludesRequestsRegisteredAfterDialStarts(t *testing.T) {
 	rt := &roundTripper{}
 	firstContext, cancelFirst := context.WithCancel(context.Background())
-	releaseFirst := rt.registerHTTP2DialContext("example.com:443", firstContext)
-	defer releaseFirst()
+	firstRegistration := rt.registerHTTP2DialContext("example.com:443", firstContext)
+	defer firstRegistration.release()
 
 	combined, cancelCombined := rt.contextForHTTP2Dial("example.com:443")
 	defer cancelCombined()
 
 	secondContext, cancelSecond := context.WithCancel(context.Background())
-	releaseSecond := rt.registerHTTP2DialContext("example.com:443", secondContext)
-	defer releaseSecond()
+	secondRegistration := rt.registerHTTP2DialContext("example.com:443", secondContext)
+	defer secondRegistration.release()
 
 	cancelFirst()
 	select {

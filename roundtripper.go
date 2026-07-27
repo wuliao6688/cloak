@@ -573,8 +573,8 @@ type contextAwareHTTP2Transport struct {
 }
 
 func (t *contextAwareHTTP2Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	release := t.owner.registerHTTP2DialContext(t.addr, req.Context())
-	defer release()
+	registration := t.owner.registerHTTP2DialContext(t.addr, req.Context())
+	defer registration.release()
 	return t.transport.RoundTrip(req)
 }
 
@@ -584,7 +584,31 @@ func (t *contextAwareHTTP2Transport) CloseIdleConnections() {
 	}
 }
 
-func (rt *roundTripper) registerHTTP2DialContext(addr string, ctx context.Context) func() {
+type http2DialContextRegistration struct {
+	owner                 *roundTripper
+	addr                  string
+	id                    uint64
+	stopCancellationWatch func() bool
+}
+
+func (registration http2DialContextRegistration) release() {
+	if registration.stopCancellationWatch != nil {
+		registration.stopCancellationWatch()
+	}
+
+	rt := registration.owner
+	rt.http2DialContextsLck.Lock()
+	contexts := rt.http2DialContexts[registration.addr]
+	delete(contexts, registration.id)
+	if len(contexts) == 0 {
+		delete(rt.http2DialContexts, registration.addr)
+	}
+	cancels := rt.http2DialCancelsWithoutWaitersLocked(registration.addr)
+	rt.http2DialContextsLck.Unlock()
+	cancelHTTP2Dials(cancels)
+}
+
+func (rt *roundTripper) registerHTTP2DialContext(addr string, ctx context.Context) http2DialContextRegistration {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -602,24 +626,18 @@ func (rt *roundTripper) registerHTTP2DialContext(addr string, ctx context.Contex
 	}
 	contexts[id] = ctx
 	rt.http2DialContextsLck.Unlock()
-	stopCancellationWatch := context.AfterFunc(ctx, func() {
-		rt.cancelHTTP2DialsWithoutWaiters(addr)
-	})
 
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			stopCancellationWatch()
-			rt.http2DialContextsLck.Lock()
-			delete(contexts, id)
-			if len(contexts) == 0 {
-				delete(rt.http2DialContexts, addr)
-			}
-			cancels := rt.http2DialCancelsWithoutWaitersLocked(addr)
-			rt.http2DialContextsLck.Unlock()
-			cancelHTTP2Dials(cancels)
+	registration := http2DialContextRegistration{
+		owner: rt,
+		addr:  addr,
+		id:    id,
+	}
+	if ctx.Done() != nil {
+		registration.stopCancellationWatch = context.AfterFunc(ctx, func() {
+			rt.cancelHTTP2DialsWithoutWaiters(addr)
 		})
 	}
+	return registration
 }
 
 // contextForHTTP2Dial keeps a shared connection attempt alive while at least
