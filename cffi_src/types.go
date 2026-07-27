@@ -79,6 +79,7 @@ type RequestInput struct {
 	RequestMethod               string              `json:"requestMethod"`
 	RequestUrl                  string              `json:"requestUrl"`
 	TLSClientIdentifier         string              `json:"tlsClientIdentifier"`
+	ProfileID                   int                 `json:"profileId"`           // numeric alternative to TLSClientIdentifier
 	HeaderOrder                 []string            `json:"headerOrder"`
 	RequestCookies              []Cookie            `json:"requestCookies"`
 	TimeoutMilliseconds         int                 `json:"timeoutMilliseconds"`

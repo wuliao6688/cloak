@@ -413,7 +413,14 @@ func encodeByteResponse(body []byte) string {
 
 func getTlsClient(requestInput RequestInput, sessionId string, withSession bool) (tls_client.HttpClient, error) {
 	tlsClientIdentifier := requestInput.TLSClientIdentifier
+
+	// Resolve from integer ProfileID if string identifier is empty.
+	if tlsClientIdentifier == "" && requestInput.ProfileID > 0 {
+		tlsClientIdentifier = profiles.ProfileID(requestInput.ProfileID).String()
+	}
+
 	proxyUrl := requestInput.ProxyUrl
+
 	var resolvedIdentifierProfile profiles.ClientProfile
 	if tlsClientIdentifier != "" {
 		var err error
