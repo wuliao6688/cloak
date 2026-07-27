@@ -1,6 +1,16 @@
 # Changelog
 
-## v1.4.0 — 画像轮换防检测
+## v1.4.1 — 代理管理
+
+### 新增
+- **代理切换**：`tg_session_set_proxy(s, url)` / `tg_session_get_proxy(s)`
+- **代理池轮换**：`tg_session_set_proxy_list(s, list, everyN)`
+  - 格式：`"http://ip1:8080\nhttp://ip2:8080\nsocks5://ip3:1080"`
+  - 自动与画像轮换并行，实现画像+IP双维度防检测
+- **SOCKS5 + 认证**：`"socks5://user:pass@host:port"` 格式
+- **动态清除**：`tg_session_set_proxy(s, "")` 清除代理
+- Python: `s.set_proxy/` `s.proxy` / `s.set_proxy_list`
+- 易语言: 场景八（HTTP认证/SOCKS5/代理池/清除）
 
 ### 新增
 - **画像自动轮换**：`tg_session_set_rotate(s, group, everyN, tlsRefreshEvery)`

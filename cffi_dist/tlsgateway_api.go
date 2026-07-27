@@ -64,6 +64,11 @@ type apiSession struct {
 	rotateEvery  int // switch profile every N requests
 	reqCount     int // total request counter
 	tlsRefresh   int // force new TLS handshake every N requests (default 50)
+
+	// Proxy rotation
+	proxyList   []string // proxy pool for rotation
+	proxyIdx    int      // current index in proxyList
+	proxyRotate int      // switch proxy every N requests (0=disabled)
 }
 
 var (
@@ -156,6 +161,99 @@ func tg_session_free(sessionID *C.char) {
 	apiSessionsMu.Lock()
 	delete(apiSessions, id)
 	apiSessionsMu.Unlock()
+}
+
+// ─── Proxy Management ─────────────────────────────────────
+
+//export tg_session_set_proxy
+func tg_session_set_proxy(sessionID *C.char, proxyURL *C.char) C.int {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok {
+		return errSession
+	}
+	proxy := C.GoString(proxyURL)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if proxy == "" {
+		// Clear proxy: rebuild client without proxy
+		s.proxy = ""
+		s.proxyList = nil
+		s.proxyIdx = 0
+		s.proxyRotate = 0
+		return errOrOK(s.rebuild())
+	}
+
+	s.proxy = proxy
+	s.proxyList = nil
+	s.proxyRotate = 0
+	return errOrOK(s.rebuild())
+}
+
+//export tg_session_get_proxy
+func tg_session_get_proxy(sessionID *C.char) *C.char {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return cString(s.proxy)
+}
+
+//export tg_session_set_proxy_list
+func tg_session_set_proxy_list(sessionID *C.char, proxyList *C.char, rotateEveryN C.int) C.int {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok {
+		return errSession
+	}
+
+	listStr := C.GoString(proxyList)
+	if listStr == "" {
+		return tg_session_set_proxy(sessionID, nil)
+	}
+
+	// Parse: "http://ip1:8080\nhttp://ip2:8080\nsocks5://ip3:1080"
+	var proxies []string
+	for _, line := range strings.Split(listStr, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			proxies = append(proxies, line)
+		}
+	}
+	if len(proxies) == 0 {
+		return errNetwork
+	}
+
+	rotate := int(rotateEveryN)
+	if rotate <= 0 {
+		rotate = 1
+	}
+
+	s.mu.Lock()
+	s.proxyList = proxies
+	s.proxyIdx = 0
+	s.proxyRotate = rotate
+	s.proxy = proxies[0]
+	s.mu.Unlock()
+
+	return errOrOK(s.rebuild())
+}
+
+func errOrOK(err error) C.int {
+	if err != nil {
+		return errNetwork
+	}
+	return errOK
 }
 
 // ─── Anti-Detection ───────────────────────────────────────
@@ -442,6 +540,13 @@ func apiRequest(sessionID *C.char, method string, requestURL *C.char, body, head
 
 	// TLS context refresh (new ClientHello, new session ticket)
 	if s.tlsRefresh > 0 && s.reqCount%s.tlsRefresh == 0 {
+		s.rebuild()
+	}
+
+	// Proxy rotation
+	if len(s.proxyList) > 0 && s.proxyRotate > 0 && s.reqCount%s.proxyRotate == 0 {
+		s.proxyIdx = (s.proxyIdx + 1) % len(s.proxyList)
+		s.proxy = s.proxyList[s.proxyIdx]
 		s.rebuild()
 	}
 	s.mu.Unlock()

@@ -43,6 +43,19 @@
 .DLL命令 tg_session_clear_cookies, 整数型, "libtlsgateway.so", "tg_session_clear_cookies"
     .参数 sessionID, 文本型
 
+' === Proxy ===
+.DLL命令 tg_session_set_proxy, 整数型, "libtlsgateway.so", "tg_session_set_proxy"
+    .参数 sessionID, 文本型
+    .参数 proxyURL, 文本型
+
+.DLL命令 tg_session_get_proxy, 文本型, "libtlsgateway.so", "tg_session_get_proxy"
+    .参数 sessionID, 文本型
+
+.DLL命令 tg_session_set_proxy_list, 整数型, "libtlsgateway.so", "tg_session_set_proxy_list"
+    .参数 sessionID, 文本型
+    .参数 proxyList, 文本型
+    .参数 rotateEveryN, 整数型
+
 ' === Anti-Detection ===
 .DLL命令 tg_session_set_rotate, 整数型, "libtlsgateway.so", "tg_session_set_rotate"
     .参数 sessionID, 文本型
@@ -303,5 +316,30 @@
         调试输出("请求 #" + 到文本(i) + " 状态: " + 到文本(tg_response_status(resp)))
         tg_response_free(resp)
     .计次循环尾 ()
+    
+    tg_session_free(session)
+
+' ═══════════════════════════════════════════════════════════
+' 场景八：代理管理
+' ═══════════════════════════════════════════════════════════
+
+.子程序 场景8_代理管理
+    .局部变量 session, 文本型
+    
+    ' 创建时不设代理
+    session = tg_session_create(PROFILE_CHROME_150, 30, "")
+    
+    ' 动态设置代理（HTTP 认证）
+    tg_session_set_proxy(session, "http://user:pass@127.0.0.1:8080")
+    调试输出("当前代理: " + tg_session_get_proxy(session))
+    
+    ' 切换 SOCKS5
+    tg_session_set_proxy(session, "socks5://127.0.0.1:1080")
+    
+    ' 代理池（每5次请求轮换）
+    tg_session_set_proxy_list(session, "http://ip1:8080" + 字符(10) + "http://ip2:8080", 5)
+    
+    ' 清除
+    tg_session_set_proxy(session, "")
     
     tg_session_free(session)
