@@ -48,6 +48,13 @@ PROFILE_BRAVE_146 = 31
 PROFILE_OKHTTP4_ANDROID_13 = 40
 PROFILE_EDGE_120 = 50
 
+# Rotation groups
+ROTATE_CHROME = 1
+ROTATE_FIREFOX = 2
+ROTATE_SAFARI = 3
+ROTATE_MOBILE = 4
+ROTATE_ALL = 5
+
 # ─── Error Codes ───────────────────────────────────────────
 
 ERR_OK = 0
@@ -110,6 +117,10 @@ _lib.tg_session_set_cookies.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes
 _lib.tg_session_set_cookies.restype = ctypes.c_int
 _lib.tg_session_clear_cookies.argtypes = [ctypes.c_char_p]
 _lib.tg_session_clear_cookies.restype = ctypes.c_int
+
+# Anti-detection
+_lib.tg_session_set_rotate.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+_lib.tg_session_set_rotate.restype = ctypes.c_int
 
 # Requests
 _lib.tg_get.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
@@ -267,6 +278,20 @@ class Session:
         code = _lib.tg_session_clear_cookies(self._sid_bytes)
         if code != 0:
             raise TgError(code, "clear_cookies failed")
+
+    # ─── Anti-Detection ────────────────────────────────
+
+    def set_rotate(self, group: int, every_n: int = 3, tls_refresh: int = 50):
+        """启用画像自动轮换。
+        
+        Args:
+            group: 1=Chrome, 2=Firefox, 3=Safari, 4=Mobile, 5=All
+            every_n: 每 N 次请求切换画像
+            tls_refresh: 每 N 次请求刷新 TLS 握手
+        """
+        code = _lib.tg_session_set_rotate(self._sid_bytes, group, every_n, tls_refresh)
+        if code != 0:
+            raise TgError(code, "set_rotate failed")
 
     # ─── Requests ──────────────────────────────────────
 

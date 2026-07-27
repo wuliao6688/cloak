@@ -66,3 +66,50 @@ func ResolveProfileID(id ProfileID) (ClientProfile, error) {
 func (id ProfileID) String() string {
 	return profileIDMap[id]
 }
+
+// ─── Rotation Groups ──────────────────────────────────────
+
+// RotateGroup identifies a family of profiles for automatic rotation.
+type RotateGroup int
+
+const (
+	RotateGroupChrome  RotateGroup = 1  // Chrome 116-150
+	RotateGroupFirefox RotateGroup = 2  // Firefox 120-148
+	RotateGroupSafari  RotateGroup = 3  // Safari iOS 15-18
+	RotateGroupMobile  RotateGroup = 4  // OkHttp, mobile clients
+	RotateGroupAll     RotateGroup = 5  // All verified profiles
+)
+
+// rotatePools maps each RotateGroup to a pool of profile IDs for rotation.
+var rotatePools = map[RotateGroup][]ProfileID{
+	RotateGroupChrome: {
+		ProfileChrome150, ProfileChrome146, ProfileChrome131,
+		ProfileChrome120, ProfileChrome117, ProfileChrome116,
+	},
+	RotateGroupFirefox: {
+		ProfileFirefox148, ProfileFirefox147, ProfileFirefox132, ProfileFirefox120,
+	},
+	RotateGroupSafari: {
+		ProfileSafariIOS18_5, ProfileSafariIOS17_0, ProfileSafariIOS16_0,
+		ProfileSafari15_6_1, ProfileSafariIPad15_6,
+	},
+	RotateGroupMobile: {
+		ProfileOkHttp4Android13,
+	},
+	RotateGroupAll: {
+		ProfileChrome150, ProfileChrome146, ProfileChrome131, ProfileChrome120,
+		ProfileFirefox148, ProfileFirefox147, ProfileFirefox132,
+		ProfileSafariIOS18_5, ProfileSafariIOS17_0,
+		ProfileOpera91, ProfileBrave146, ProfileOkHttp4Android13, ProfileEdge120,
+	},
+}
+
+// NextRotateProfile returns the next profile in the rotation group.
+// idx should be a request counter; it cycles through the pool.
+func NextRotateProfile(group RotateGroup, idx int) (ProfileID, error) {
+	pool, ok := rotatePools[group]
+	if !ok {
+		return 0, ErrUnknownClientProfile
+	}
+	return pool[idx%len(pool)], nil
+}

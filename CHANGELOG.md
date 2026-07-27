@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.4.0 — 画像轮换防检测
+
+### 新增
+- **画像自动轮换**：`tg_session_set_rotate(s, group, everyN, tlsRefreshEvery)`
+  - 5 个轮换组：Chrome / Firefox / Safari / Mobile / All
+  - 每 N 次请求自动切换画像，保留 Cookie jar
+- **TLS 上下文自动刷新**：每 N 次请求重建 Client（新 ClientHello + Session Ticket）
+- `profiles/consts.go`：`RotateGroup` 类型 + `NextRotateProfile()` 函数
+- Python: `session.set_rotate(group, every_n, tls_refresh)`
+- 易语言: `tg_session_set_rotate(session, ROTATE_CHROME, 3, 20)`
+- 场景七：10 次请求自动在 Chrome 116-150 间轮换
+
+### 背景
+kurl-client（BoringSSL）在大批量人机平台验证中后期被识别。
+根本原因：静态指纹 + 无轮换 + TLS 会话复用。
+本版本的轮换+刷新机制从根本上解决了这个问题。
+
 ## v1.3.0 — 商用级完整 API
 
 ### 新增 DLL 导出

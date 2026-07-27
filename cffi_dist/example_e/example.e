@@ -43,6 +43,13 @@
 .DLL命令 tg_session_clear_cookies, 整数型, "libtlsgateway.so", "tg_session_clear_cookies"
     .参数 sessionID, 文本型
 
+' === Anti-Detection ===
+.DLL命令 tg_session_set_rotate, 整数型, "libtlsgateway.so", "tg_session_set_rotate"
+    .参数 sessionID, 文本型
+    .参数 rotateGroup, 整数型
+    .参数 everyN, 整数型
+    .参数 tlsRefreshEvery, 整数型
+
 ' === Requests ===
 .DLL命令 tg_get, 整数型, "libtlsgateway.so", "tg_get"
     .参数 sessionID, 文本型
@@ -113,6 +120,14 @@
 .常量 ERR_SESSION, 3
 .常量 ERR_TIMEOUT, 4
 .常量 ERR_PROFILE, 5
+
+' ─── 轮换组 ───────────────────────────────────────────────
+
+.常量 ROTATE_CHROME, 1
+.常量 ROTATE_FIREFOX, 2
+.常量 ROTATE_SAFARI, 3
+.常量 ROTATE_MOBILE, 4
+.常量 ROTATE_ALL, 5
 
 ' ═══════════════════════════════════════════════════════════
 ' 场景一：最简单的 GET 请求
@@ -266,4 +281,27 @@
     session = tg_session_create(PROFILE_CHROME_150, 10, "")
     状态码 = tg_get_status(session, "https://httpbin.org/status/404")
     调试输出("状态码: " + 到文本(状态码))
+    tg_session_free(session)
+
+' ═══════════════════════════════════════════════════════════
+' 场景七：画像轮换防检测（人机平台专用）
+' ═══════════════════════════════════════════════════════════
+
+.子程序 场景7_画像轮换
+    .局部变量 session, 文本型
+    .局部变量 resp, 整数型
+    .局部变量 i, 整数型
+    
+    session = tg_session_create(PROFILE_CHROME_150, 30, "")
+    
+    ' 开启轮换: Chrome 组, 每 3 次请求切换画像, 每 20 次请求刷新 TLS
+    tg_session_set_rotate(session, ROTATE_CHROME, 3, 20)
+    
+    ' 发 10 次请求——自动在 Chrome116~150 之间轮换
+    .计次循环首 (10, i)
+        resp = tg_get(session, "https://httpbin.org/ip")
+        调试输出("请求 #" + 到文本(i) + " 状态: " + 到文本(tg_response_status(resp)))
+        tg_response_free(resp)
+    .计次循环尾 ()
+    
     tg_session_free(session)

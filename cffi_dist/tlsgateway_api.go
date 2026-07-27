@@ -58,6 +58,12 @@ type apiSession struct {
 	timeout   int
 	proxy     string
 	mu        sync.Mutex
+
+	// Anti-detection
+	rotateGroup  int // RotateGroup, 0=disabled
+	rotateEvery  int // switch profile every N requests
+	reqCount     int // total request counter
+	tlsRefresh   int // force new TLS handshake every N requests (default 50)
 }
 
 var (
@@ -150,6 +156,28 @@ func tg_session_free(sessionID *C.char) {
 	apiSessionsMu.Lock()
 	delete(apiSessions, id)
 	apiSessionsMu.Unlock()
+}
+
+// ─── Anti-Detection ───────────────────────────────────────
+
+//export tg_session_set_rotate
+func tg_session_set_rotate(sessionID *C.char, rotateGroup C.int, everyN C.int, tlsRefreshEvery C.int) C.int {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok {
+		return errSession
+	}
+	s.mu.Lock()
+	s.rotateGroup = int(rotateGroup)
+	s.rotateEvery = int(everyN)
+	s.tlsRefresh = int(tlsRefreshEvery)
+	if s.tlsRefresh <= 0 {
+		s.tlsRefresh = 50 // default
+	}
+	s.mu.Unlock()
+	return errOK
 }
 
 // ─── Profile Management ───────────────────────────────────
@@ -398,6 +426,25 @@ func apiRequest(sessionID *C.char, method string, requestURL *C.char, body, head
 	if !ok {
 		return cErrorResponse(errSession, "session not found")
 	}
+
+	// ─── Anti-detection: rotation + TLS refresh ───────────
+	s.mu.Lock()
+	s.reqCount++
+
+	// Profile rotation
+	if s.rotateGroup > 0 && s.rotateEvery > 0 && s.reqCount%s.rotateEvery == 0 {
+		nextPID, err := profiles.NextRotateProfile(profiles.RotateGroup(s.rotateGroup), s.reqCount)
+		if err == nil {
+			s.profileID = int(nextPID)
+			s.rebuild()
+		}
+	}
+
+	// TLS context refresh (new ClientHello, new session ticket)
+	if s.tlsRefresh > 0 && s.reqCount%s.tlsRefresh == 0 {
+		s.rebuild()
+	}
+	s.mu.Unlock()
 
 	urlStr := C.GoString(requestURL)
 
