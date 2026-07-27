@@ -66,9 +66,4 @@ func main() {
 	fmt.Printf("Cookies stored: %d\n", len(cookies))
 }
 
-// Example of error handling with sentinel errors.
-func handleClientError(err error) {
-	// You can now use errors.Is to check specific failure modes:
-	// if errors.Is(err, tls_client.ErrRacingNotSupported) { ... }
-	_ = err
-}
+

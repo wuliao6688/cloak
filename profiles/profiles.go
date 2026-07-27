@@ -4,7 +4,6 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/bogdanfinn/fhttp/http2"
 	tls "github.com/bogdanfinn/utls"
 )
 
@@ -101,15 +100,17 @@ var canonicalTLSClients = maps.Clone(MappedTLSClients)
 
 // AllClientProfiles returns a defensive copy of the canonical profile registry.
 func AllClientProfiles() map[string]ClientProfile {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 	return maps.Clone(canonicalTLSClients)
 }
 
 type ClientProfile struct {
 	clientHelloId          tls.ClientHelloID
-	headerPriority         *http2.PriorityParam
-	settings               map[http2.SettingID]uint32
-	settingsOrder          []http2.SettingID
-	priorities             []http2.Priority
+	headerPriority         *PriorityParam
+	settings               map[SettingID]uint32
+	settingsOrder          []SettingID
+	priorities             []Priority
 	pseudoHeaderOrder      []string
 	connectionFlow         uint32
 	streamID               uint32
@@ -121,7 +122,7 @@ type ClientProfile struct {
 	http3SendGreaseFrames  bool
 }
 
-func NewClientProfile(clientHelloId tls.ClientHelloID, settings map[http2.SettingID]uint32, settingsOrder []http2.SettingID, pseudoHeaderOrder []string, connectionFlow uint32, priorities []http2.Priority, headerPriority *http2.PriorityParam, streamID uint32, allowHTTP bool, http3Settings map[uint64]uint64, http3SettingsOrder []uint64, http3PriorityParam uint32, http3PseudoHeaderOrder []string, http3SendGreaseFrames bool) ClientProfile {
+func NewClientProfile(clientHelloId tls.ClientHelloID, settings map[SettingID]uint32, settingsOrder []SettingID, pseudoHeaderOrder []string, connectionFlow uint32, priorities []Priority, headerPriority *PriorityParam, streamID uint32, allowHTTP bool, http3Settings map[uint64]uint64, http3SettingsOrder []uint64, http3PriorityParam uint32, http3PseudoHeaderOrder []string, http3SendGreaseFrames bool) ClientProfile {
 	return ClientProfile{
 		clientHelloId:          cloneClientHelloID(clientHelloId),
 		settings:               maps.Clone(settings),
@@ -148,11 +149,11 @@ func (c ClientProfile) GetClientHelloStr() string {
 	return c.clientHelloId.Str()
 }
 
-func (c ClientProfile) GetSettings() map[http2.SettingID]uint32 {
+func (c ClientProfile) GetSettings() map[SettingID]uint32 {
 	return maps.Clone(c.settings)
 }
 
-func (c ClientProfile) GetSettingsOrder() []http2.SettingID {
+func (c ClientProfile) GetSettingsOrder() []SettingID {
 	return slices.Clone(c.settingsOrder)
 }
 
@@ -164,7 +165,7 @@ func (c ClientProfile) GetPseudoHeaderOrder() []string {
 	return slices.Clone(c.pseudoHeaderOrder)
 }
 
-func (c ClientProfile) GetHeaderPriority() *http2.PriorityParam {
+func (c ClientProfile) GetHeaderPriority() *PriorityParam {
 	return clonePriorityParam(c.headerPriority)
 }
 
@@ -172,7 +173,7 @@ func (c ClientProfile) GetClientHelloId() tls.ClientHelloID {
 	return cloneClientHelloID(c.clientHelloId)
 }
 
-func (c ClientProfile) GetPriorities() []http2.Priority {
+func (c ClientProfile) GetPriorities() []Priority {
 	return slices.Clone(c.priorities)
 }
 
@@ -204,7 +205,7 @@ func (c ClientProfile) GetHttp3SendGreaseFrames() bool {
 	return c.http3SendGreaseFrames
 }
 
-func clonePriorityParam(priority *http2.PriorityParam) *http2.PriorityParam {
+func clonePriorityParam(priority *PriorityParam) *PriorityParam {
 	if priority == nil {
 		return nil
 	}

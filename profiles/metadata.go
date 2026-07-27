@@ -109,6 +109,8 @@ var normalizedProfileMetadataKeys = func() map[string]string {
 }()
 
 func GetProfileMetadata(key string) (ClientProfileMetadata, bool) {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 	metadata, ok := profileMetadata[key]
 	if !ok {
 		normalizedKey := strings.TrimSpace(strings.ToLower(key))
@@ -122,6 +124,8 @@ func GetProfileMetadata(key string) (ClientProfileMetadata, bool) {
 
 // AllProfileMetadata returns a defensive copy of the metadata registry.
 func AllProfileMetadata() map[string]ClientProfileMetadata {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 	metadata := make(map[string]ClientProfileMetadata, len(profileMetadata))
 	for key, value := range profileMetadata {
 		metadata[key] = cloneClientProfileMetadata(value)
@@ -131,6 +135,8 @@ func AllProfileMetadata() map[string]ClientProfileMetadata {
 
 // ProfilesWithKnownGaps returns keys that have non-empty KnownGaps.
 func ProfilesWithKnownGaps() []string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 	var keys []string
 	for k, m := range profileMetadata {
 		if len(m.KnownGaps) > 0 {

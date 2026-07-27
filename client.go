@@ -212,7 +212,7 @@ func validateConfig(config *httpClientConfig) error {
 	}
 
 	if config.dialContext != nil && (config.proxyUrl != "" || config.proxyDialerFactory != nil) {
-		return fmt.Errorf("invalid config: WithDialContext overrides the built-in proxy logic. If you use a custom dialer, you must handle the proxy connection (CONNECT handshake) yourself inside that dialer.")
+		return fmt.Errorf("invalid config: WithDialContext overrides the built-in proxy logic; if you use a custom dialer, you must handle the proxy connection (CONNECT handshake) yourself inside that dialer")
 	}
 
 	return nil

@@ -442,7 +442,16 @@ func getTlsClient(requestInput RequestInput, sessionId string, withSession bool)
 			return nil, fmt.Errorf("can not build http client out of custom tls client information: %w", err)
 		}
 
-		clientProfile = profiles.NewClientProfile(clientHelloId, h2Settings, h2SettingsOrder, pseudoHeaderOrder, connectionFlow, priorityFrames, headerPriority, streamId, allowHttp, h3Settings, h3SettingsOrder, h3PriorityParam, h3PseudoHeaderOrder, http3SendGreaseFrames)
+		clientProfile = profiles.NewClientProfile(
+			clientHelloId,
+			profilesSettingMap(h2Settings),
+			profilesSettingSlice(h2SettingsOrder),
+			pseudoHeaderOrder, connectionFlow,
+			profilesPriorities(priorityFrames),
+			profilesPriorityParams(headerPriority),
+			streamId, allowHttp,
+			h3Settings, h3SettingsOrder, h3PriorityParam, h3PseudoHeaderOrder, http3SendGreaseFrames,
+		)
 	}
 
 	if tlsClientIdentifier != "" {
@@ -553,11 +562,11 @@ func getTlsClient(requestInput RequestInput, sessionId string, withSession bool)
 		options = append(options, tls_client.WithInsecureSkipVerify())
 	}
 
-	if requestInput.DefaultHeaders != nil && len(requestInput.DefaultHeaders) != 0 {
+	if len(requestInput.DefaultHeaders) != 0 {
 		options = append(options, tls_client.WithDefaultHeaders(requestInput.DefaultHeaders))
 	}
 
-	if requestInput.ConnectHeaders != nil && len(requestInput.ConnectHeaders) != 0 {
+	if len(requestInput.ConnectHeaders) != 0 {
 		options = append(options, tls_client.WithConnectHeaders(requestInput.ConnectHeaders))
 	}
 
@@ -748,4 +757,37 @@ func cookiesToMap(cookies []*http.Cookie) map[string]string {
 	}
 
 	return ret
+}
+
+// Conversion helpers for fhttp/http2 → profiles H2 types.
+func profilesSettingMap(m map[http2.SettingID]uint32) map[profiles.SettingID]uint32 {
+	out := make(map[profiles.SettingID]uint32, len(m))
+	for k, v := range m { out[profiles.SettingID(k)] = v }
+	return out
+}
+
+func profilesSettingSlice(s []http2.SettingID) []profiles.SettingID {
+	out := make([]profiles.SettingID, len(s))
+	for i, v := range s { out[i] = profiles.SettingID(v) }
+	return out
+}
+
+func profilesPriorities(pp []http2.Priority) []profiles.Priority {
+	out := make([]profiles.Priority, len(pp))
+	for i, p := range pp {
+		out[i] = profiles.Priority{
+			StreamID:      p.StreamID,
+			PriorityParam: profiles.PriorityParam(p.PriorityParam),
+		}
+	}
+	return out
+}
+
+func profilesPriorityParams(p *http2.PriorityParam) *profiles.PriorityParam {
+	if p == nil { return nil }
+	return &profiles.PriorityParam{
+		StreamDep: p.StreamDep,
+		Exclusive: p.Exclusive,
+		Weight:    p.Weight,
+	}
 }

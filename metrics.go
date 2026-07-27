@@ -19,11 +19,11 @@ type TransportMetrics struct {
 }
 
 type metricsCounters struct {
-	Created   atomic.Int64
-	Reused    atomic.Int64
-	Closed    atomic.Int64
-	Evicted   atomic.Int64
-	Errors    atomic.Int64
+	Created atomic.Int64
+	Reused  atomic.Int64
+	Closed  atomic.Int64
+	Evicted atomic.Int64
+	Errors  atomic.Int64
 }
 
 type racingMetrics struct {
@@ -70,8 +70,8 @@ func (m *TransportMetrics) Snapshot() MetricsSnapshot {
 // MetricsSnapshot is a point-in-time snapshot of transport metrics.
 type MetricsSnapshot struct {
 	ConnCreated, ConnReused, ConnClosed, ConnEvicted, ConnErrors int64
-	TpCreated, TpReused, TpClosed, TpEvicted, TpErrors          int64
-	RaceAttempts, RaceH3Wins, RaceH2Wins, RaceFailed            int64
+	TpCreated, TpReused, TpClosed, TpEvicted, TpErrors           int64
+	RaceAttempts, RaceH3Wins, RaceH2Wins, RaceFailed             int64
 	RaceCacheHit, RaceCacheMiss                                  int64
 	CacheLookups, CacheHits, CacheMisses                         int64
 }

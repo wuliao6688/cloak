@@ -12,13 +12,13 @@ import (
 
 // mockConn implements net.Conn for testing only the tracking layer.
 type mockConn struct {
-	readData  []byte
-	writeBuf  []byte
-	readPos   int
-	closed    bool
-	readErr   error
-	writeErr  error
-	mu        sync.Mutex
+	readData []byte
+	writeBuf []byte
+	readPos  int
+	closed   bool
+	readErr  error
+	writeErr error
+	mu       sync.Mutex
 }
 
 func newMockConn(data []byte) *mockConn {

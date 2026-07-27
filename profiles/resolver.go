@@ -74,6 +74,9 @@ func ResolveClientProfileWithKeyStrict(identifier string) (string, ClientProfile
 		return "", ClientProfile{}, fmt.Errorf("%w: identifier is empty", ErrUnknownClientProfile)
 	}
 
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+
 	if normalizedIdentifier == RandomProfileIdentifier || normalizedIdentifier == ChaosProfileIdentifier {
 		key := pickRandomBrowserProfileKey()
 		if key == "" {
@@ -96,6 +99,8 @@ func ResolveClientProfileWithKeyStrict(identifier string) (string, ClientProfile
 
 // RandomBrowserProfileKeys returns all keys eligible for random/chaos selection.
 func RandomBrowserProfileKeys() []string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 	return slices.Clone(randomBrowserProfileKeys)
 }
 
@@ -115,7 +120,12 @@ func isRandomBrowserProfileKey(key string) bool {
 		return false
 	}
 
-	if metadata, ok := GetProfileMetadata(key); ok && len(metadata.KnownGaps) > 0 {
+	// Note: GetProfileMetadata acquires registryMu.RLock, which is safe here
+	// because isRandomBrowserProfileKey is only called from init() (no lock
+	// needed) and from rebuildProfileIndexes (write lock already held).
+	// We read the metadata map directly to avoid re-entering the lock.
+	meta, ok := profileMetadata[key]
+	if ok && len(meta.KnownGaps) > 0 {
 		return false
 	}
 

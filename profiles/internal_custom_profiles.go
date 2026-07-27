@@ -3,7 +3,6 @@ package profiles
 import (
 	"math"
 
-	"github.com/bogdanfinn/fhttp/http2"
 	tls "github.com/bogdanfinn/utls"
 )
 
@@ -78,22 +77,22 @@ func getMMSClientProfile2() ClientProfile {
 		},
 	}
 
-	settings := map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingEnablePush:           1,
-		http2.SettingMaxConcurrentStreams: 100,
-		http2.SettingInitialWindowSize:    2097152,
-		http2.SettingMaxFrameSize:         16384,
-		http2.SettingMaxHeaderListSize:    math.MaxUint32,
+	settings := map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingEnablePush:           1,
+		SettingMaxConcurrentStreams: 100,
+		SettingInitialWindowSize:    2097152,
+		SettingMaxFrameSize:         16384,
+		SettingMaxHeaderListSize:    math.MaxUint32,
 	}
 
-	settingsOrder := []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder := []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingMaxHeaderListSize,
 	}
 	pseudoHeaderOrder := []string{
 		":method",
@@ -185,22 +184,22 @@ func getMMSClientProfile3() ClientProfile {
 		},
 	}
 
-	settings := map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingEnablePush:           1,
-		http2.SettingMaxConcurrentStreams: 100,
-		http2.SettingInitialWindowSize:    2097152,
-		http2.SettingMaxFrameSize:         16384,
-		http2.SettingMaxHeaderListSize:    math.MaxUint32,
+	settings := map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingEnablePush:           1,
+		SettingMaxConcurrentStreams: 100,
+		SettingInitialWindowSize:    2097152,
+		SettingMaxFrameSize:         16384,
+		SettingMaxHeaderListSize:    math.MaxUint32,
 	}
 
-	settingsOrder := []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder := []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingMaxHeaderListSize,
 	}
 	pseudoHeaderOrder := []string{
 		":method",

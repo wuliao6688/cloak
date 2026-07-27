@@ -1,7 +1,6 @@
 package profiles
 
 import (
-	"github.com/bogdanfinn/fhttp/http2"
 	tls "github.com/bogdanfinn/utls"
 	"github.com/bogdanfinn/utls/dicttls"
 )
@@ -121,17 +120,17 @@ var Firefox_148 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingEnablePush:        0,
-		http2.SettingInitialWindowSize: 131072,
-		http2.SettingMaxFrameSize:      16384,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingEnablePush:        0,
+		SettingInitialWindowSize: 131072,
+		SettingMaxFrameSize:      16384,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -140,7 +139,7 @@ var Firefox_148 = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
-	headerPriority: &http2.PriorityParam{
+	headerPriority: &PriorityParam{
 		StreamDep: 0,
 		Exclusive: false,
 		Weight:    41,
@@ -285,17 +284,17 @@ var Firefox_147 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingEnablePush:        0,
-		http2.SettingInitialWindowSize: 131072,
-		http2.SettingMaxFrameSize:      16384,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingEnablePush:        0,
+		SettingInitialWindowSize: 131072,
+		SettingMaxFrameSize:      16384,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -304,7 +303,7 @@ var Firefox_147 = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
-	headerPriority: &http2.PriorityParam{
+	headerPriority: &PriorityParam{
 		StreamDep: 0,
 		Exclusive: false,
 		Weight:    41,
@@ -444,17 +443,17 @@ var Firefox_147_PSK = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingEnablePush:        0,
-		http2.SettingInitialWindowSize: 131072,
-		http2.SettingMaxFrameSize:      16384,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingEnablePush:        0,
+		SettingInitialWindowSize: 131072,
+		SettingMaxFrameSize:      16384,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -463,7 +462,7 @@ var Firefox_147_PSK = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
-	headerPriority: &http2.PriorityParam{
+	headerPriority: &PriorityParam{
 		StreamDep: 0,
 		Exclusive: false,
 		Weight:    41,
@@ -607,17 +606,17 @@ var Firefox_146_PSK = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingEnablePush:        0,
-		http2.SettingInitialWindowSize: 131072,
-		http2.SettingMaxFrameSize:      16384,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingEnablePush:        0,
+		SettingInitialWindowSize: 131072,
+		SettingMaxFrameSize:      16384,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -626,7 +625,7 @@ var Firefox_146_PSK = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
-	headerPriority: &http2.PriorityParam{
+	headerPriority: &PriorityParam{
 		StreamDep: 0,
 		Exclusive: false,
 		Weight:    41,
@@ -742,17 +741,17 @@ var Firefox_135 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingEnablePush:        0,
-		http2.SettingInitialWindowSize: 131072,
-		http2.SettingMaxFrameSize:      16384,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingEnablePush:        0,
+		SettingInitialWindowSize: 131072,
+		SettingMaxFrameSize:      16384,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -871,17 +870,17 @@ var Firefox_133 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingEnablePush:        0,
-		http2.SettingInitialWindowSize: 131072,
-		http2.SettingMaxFrameSize:      16384,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingEnablePush:        0,
+		SettingInitialWindowSize: 131072,
+		SettingMaxFrameSize:      16384,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -979,17 +978,17 @@ var Chrome_130_PSK = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingEnablePush:        0,
-		http2.SettingInitialWindowSize: 6291456,
-		http2.SettingMaxHeaderListSize: 262144,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingEnablePush:        0,
+		SettingInitialWindowSize: 6291456,
+		SettingMaxHeaderListSize: 262144,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingInitialWindowSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -1089,17 +1088,17 @@ var Chrome_131_PSK = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingEnablePush:        0,
-		http2.SettingInitialWindowSize: 6291456,
-		http2.SettingMaxHeaderListSize: 262144,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingEnablePush:        0,
+		SettingInitialWindowSize: 6291456,
+		SettingMaxHeaderListSize: 262144,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingInitialWindowSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -1198,17 +1197,17 @@ var Chrome_131 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingEnablePush:        0,
-		http2.SettingInitialWindowSize: 6291456,
-		http2.SettingMaxHeaderListSize: 262144,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingEnablePush:        0,
+		SettingInitialWindowSize: 6291456,
+		SettingMaxHeaderListSize: 262144,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingInitialWindowSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -1327,19 +1326,19 @@ var Firefox_132 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:     65536,
-		http2.SettingEnablePush:          0,
-		http2.SettingInitialWindowSize:   131072,
-		http2.SettingMaxFrameSize:        16384,
-		http2.SettingNoRFC7540Priorities: 1,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:     65536,
+		SettingEnablePush:          0,
+		SettingInitialWindowSize:   131072,
+		SettingMaxFrameSize:        16384,
+		SettingNoRFC7540Priorities: 1,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingNoRFC7540Priorities,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingNoRFC7540Priorities,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -1436,15 +1435,15 @@ var Firefox_123 = ClientProfile{
 				}}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingInitialWindowSize: 131072,
-		http2.SettingMaxFrameSize:      16384,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingInitialWindowSize: 131072,
+		SettingMaxFrameSize:      16384,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -1453,39 +1452,39 @@ var Firefox_123 = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
-	priorities: []http2.Priority{
-		{StreamID: 3, PriorityParam: http2.PriorityParam{
+	priorities: []Priority{
+		{StreamID: 3, PriorityParam: PriorityParam{
 			StreamDep: 0,
 			Exclusive: false,
 			Weight:    200,
 		}},
-		{StreamID: 5, PriorityParam: http2.PriorityParam{
+		{StreamID: 5, PriorityParam: PriorityParam{
 			StreamDep: 0,
 			Exclusive: false,
 			Weight:    100,
 		}},
-		{StreamID: 7, PriorityParam: http2.PriorityParam{
+		{StreamID: 7, PriorityParam: PriorityParam{
 			StreamDep: 0,
 			Exclusive: false,
 			Weight:    0,
 		}},
-		{StreamID: 9, PriorityParam: http2.PriorityParam{
+		{StreamID: 9, PriorityParam: PriorityParam{
 			StreamDep: 7,
 			Exclusive: false,
 			Weight:    0,
 		}},
-		{StreamID: 11, PriorityParam: http2.PriorityParam{
+		{StreamID: 11, PriorityParam: PriorityParam{
 			StreamDep: 3,
 			Exclusive: false,
 			Weight:    0,
 		}},
-		{StreamID: 13, PriorityParam: http2.PriorityParam{
+		{StreamID: 13, PriorityParam: PriorityParam{
 			StreamDep: 0,
 			Exclusive: false,
 			Weight:    240,
 		}},
 	},
-	headerPriority: &http2.PriorityParam{
+	headerPriority: &PriorityParam{
 		StreamDep: 13,
 		Exclusive: false,
 		Weight:    41,
@@ -1574,15 +1573,15 @@ var Firefox_120 = ClientProfile{
 				}}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingInitialWindowSize: 131072,
-		http2.SettingMaxFrameSize:      16384,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:   65536,
+		SettingInitialWindowSize: 131072,
+		SettingMaxFrameSize:      16384,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -1591,38 +1590,38 @@ var Firefox_120 = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
-	headerPriority: &http2.PriorityParam{
+	headerPriority: &PriorityParam{
 		StreamDep: 13,
 		Exclusive: false,
 		Weight:    41,
 	},
-	priorities: []http2.Priority{
-		{StreamID: 3, PriorityParam: http2.PriorityParam{
+	priorities: []Priority{
+		{StreamID: 3, PriorityParam: PriorityParam{
 			StreamDep: 0,
 			Exclusive: false,
 			Weight:    200,
 		}},
-		{StreamID: 5, PriorityParam: http2.PriorityParam{
+		{StreamID: 5, PriorityParam: PriorityParam{
 			StreamDep: 0,
 			Exclusive: false,
 			Weight:    100,
 		}},
-		{StreamID: 7, PriorityParam: http2.PriorityParam{
+		{StreamID: 7, PriorityParam: PriorityParam{
 			StreamDep: 0,
 			Exclusive: false,
 			Weight:    0,
 		}},
-		{StreamID: 9, PriorityParam: http2.PriorityParam{
+		{StreamID: 9, PriorityParam: PriorityParam{
 			StreamDep: 7,
 			Exclusive: false,
 			Weight:    0,
 		}},
-		{StreamID: 11, PriorityParam: http2.PriorityParam{
+		{StreamID: 11, PriorityParam: PriorityParam{
 			StreamDep: 3,
 			Exclusive: false,
 			Weight:    0,
 		}},
-		{StreamID: 13, PriorityParam: http2.PriorityParam{
+		{StreamID: 13, PriorityParam: PriorityParam{
 			StreamDep: 0,
 			Exclusive: false,
 			Weight:    240,

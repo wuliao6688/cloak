@@ -45,48 +45,6 @@ type protocolRacer struct {
 	http3SendGreaseFrames  bool
 }
 
-// newProtocolRacer is kept for backward compatibility with external callers.
-// Prefer protocolRacerConfig.toRacer() for new code.
-func newProtocolRacer(
-	clientSessionCache tls.ClientSessionCache,
-	insecureSkipVerify bool,
-	serverNameOverwrite string,
-	transportOptions *TransportOptions,
-	settings map[http2.SettingID]uint32,
-	cachedTransports map[string]http.RoundTripper,
-	cachedTransportsLck *sync.RWMutex,
-	transportCache *transportCacheMeta,
-	transportInit *keyedLockPool,
-	certificatePinner CertificatePinner,
-	badPinHandlerFunc BadPinHandlerFunc,
-	bandwidthTracker bandwidth.BandwidthTracker,
-	http3Settings map[uint64]uint64,
-	http3SettingsOrder []uint64,
-	http3PriorityParam uint32,
-	http3PseudoHeaderOrder []string,
-	http3SendGreaseFrames bool,
-) *protocolRacer {
-	return (&protocolRacerConfig{
-		clientSessionCache:     clientSessionCache,
-		insecureSkipVerify:     insecureSkipVerify,
-		serverNameOverwrite:    serverNameOverwrite,
-		transportOptions:       transportOptions,
-		settings:               settings,
-		cachedTransports:       cachedTransports,
-		cachedTransportsLck:    cachedTransportsLck,
-		transportCache:         transportCache,
-		transportInit:          transportInit,
-		certificatePinner:      certificatePinner,
-		badPinHandlerFunc:      badPinHandlerFunc,
-		bandwidthTracker:       bandwidthTracker,
-		http3Settings:          http3Settings,
-		http3SettingsOrder:     http3SettingsOrder,
-		http3PriorityParam:     http3PriorityParam,
-		http3PseudoHeaderOrder: http3PseudoHeaderOrder,
-		http3SendGreaseFrames:  http3SendGreaseFrames,
-	}).toRacer()
-}
-
 // race races HTTP/3 and HTTP/2 connections and uses whichever responds first.
 // Similar to Chrome's "Happy Eyeballs" approach.
 func (pr *protocolRacer) race(req *http.Request, addr string, getTransportFunc func(*http.Request, string) error) (*http.Response, error) {

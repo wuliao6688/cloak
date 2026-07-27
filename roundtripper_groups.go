@@ -8,6 +8,8 @@ import (
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/bogdanfinn/fhttp/http2"
 	tls "github.com/bogdanfinn/utls"
+
+	"github.com/bogdanfinn/tls-client/profiles"
 )
 
 // --- RoundTripper grouped sub-structs ---
@@ -35,6 +37,48 @@ type rtH2Params struct {
 	priorities        []http2.Priority
 	pseudoHeaderOrder []string
 	connectionFlow    uint32
+}
+
+// profileSettings converts profiles.SettingID map to fhttp/http2.SettingID map.
+func profileSettings(m map[profiles.SettingID]uint32) map[http2.SettingID]uint32 {
+	out := make(map[http2.SettingID]uint32, len(m))
+	for k, v := range m {
+		out[http2.SettingID(k)] = v
+	}
+	return out
+}
+
+// profileSettingsOrder converts profiles.SettingID slice to fhttp/http2.SettingID slice.
+func profileSettingsOrder(s []profiles.SettingID) []http2.SettingID {
+	out := make([]http2.SettingID, len(s))
+	for i, v := range s {
+		out[i] = http2.SettingID(v)
+	}
+	return out
+}
+
+// profilePriorityParam converts profiles.PriorityParam to fhttp/http2.PriorityParam.
+func profilePriorityParam(p *profiles.PriorityParam) *http2.PriorityParam {
+	if p == nil {
+		return nil
+	}
+	return &http2.PriorityParam{
+		StreamDep: p.StreamDep,
+		Exclusive: p.Exclusive,
+		Weight:    p.Weight,
+	}
+}
+
+// profilePriorities converts profiles.Priority slice to fhttp/http2.Priority slice.
+func profilePriorities(pp []profiles.Priority) []http2.Priority {
+	out := make([]http2.Priority, len(pp))
+	for i, p := range pp {
+		out[i] = http2.Priority{
+			StreamID:      p.StreamID,
+			PriorityParam: http2.PriorityParam(p.PriorityParam),
+		}
+	}
+	return out
 }
 
 // rtH3Params groups HTTP/3 protocol parameters.

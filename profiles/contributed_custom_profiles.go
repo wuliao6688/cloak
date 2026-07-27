@@ -3,7 +3,6 @@ package profiles
 import (
 	"math"
 
-	"github.com/bogdanfinn/fhttp/http2"
 	tls "github.com/bogdanfinn/utls"
 )
 
@@ -76,19 +75,19 @@ var ZalandoAndroidMobile = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingMaxConcurrentStreams: math.MaxUint32,
-		http2.SettingInitialWindowSize:    16777216,
-		http2.SettingMaxFrameSize:         16384,
-		http2.SettingMaxHeaderListSize:    math.MaxUint32,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingMaxConcurrentStreams: math.MaxUint32,
+		SettingInitialWindowSize:    16777216,
+		SettingMaxFrameSize:         16384,
+		SettingMaxHeaderListSize:    math.MaxUint32,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -177,19 +176,19 @@ var ZalandoIosMobile = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingMaxConcurrentStreams: 100,
-		http2.SettingInitialWindowSize:    2097152,
-		http2.SettingMaxFrameSize:         16384,
-		http2.SettingMaxHeaderListSize:    math.MaxUint32,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingMaxConcurrentStreams: 100,
+		SettingInitialWindowSize:    2097152,
+		SettingMaxFrameSize:         16384,
+		SettingMaxHeaderListSize:    math.MaxUint32,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -278,19 +277,19 @@ var NikeIosMobile = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingMaxConcurrentStreams: 100,
-		http2.SettingInitialWindowSize:    2097152,
-		http2.SettingMaxFrameSize:         16384,
-		http2.SettingMaxHeaderListSize:    math.MaxUint32,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingMaxConcurrentStreams: 100,
+		SettingInitialWindowSize:    2097152,
+		SettingMaxFrameSize:         16384,
+		SettingMaxHeaderListSize:    math.MaxUint32,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -370,19 +369,19 @@ var NikeAndroidMobile = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingMaxConcurrentStreams: math.MaxUint32,
-		http2.SettingInitialWindowSize:    16777216,
-		http2.SettingMaxFrameSize:         16384,
-		http2.SettingMaxHeaderListSize:    math.MaxUint32,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingMaxConcurrentStreams: math.MaxUint32,
+		SettingInitialWindowSize:    16777216,
+		SettingMaxFrameSize:         16384,
+		SettingMaxHeaderListSize:    math.MaxUint32,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -456,19 +455,19 @@ var CloudflareCustom = ClientProfile{
 	},
 
 	//actually the h2 settings are not relevant, because this client does only support http1
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingMaxConcurrentStreams: math.MaxUint32,
-		http2.SettingInitialWindowSize:    16777216,
-		http2.SettingMaxFrameSize:         16384,
-		http2.SettingMaxHeaderListSize:    math.MaxUint32,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingMaxConcurrentStreams: math.MaxUint32,
+		SettingInitialWindowSize:    16777216,
+		SettingMaxFrameSize:         16384,
+		SettingMaxHeaderListSize:    math.MaxUint32,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -547,21 +546,21 @@ var MMSIos = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingEnablePush:           1,
-		http2.SettingMaxConcurrentStreams: 100,
-		http2.SettingInitialWindowSize:    2097152,
-		http2.SettingMaxFrameSize:         16384,
-		http2.SettingMaxHeaderListSize:    math.MaxUint32,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingEnablePush:           1,
+		SettingMaxConcurrentStreams: 100,
+		SettingInitialWindowSize:    2097152,
+		SettingMaxFrameSize:         16384,
+		SettingMaxHeaderListSize:    math.MaxUint32,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -650,21 +649,21 @@ var MeshIos = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingEnablePush:           1,
-		http2.SettingMaxConcurrentStreams: 100,
-		http2.SettingInitialWindowSize:    2097152,
-		http2.SettingMaxFrameSize:         16384,
-		http2.SettingMaxHeaderListSize:    math.MaxUint32,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingEnablePush:           1,
+		SettingMaxConcurrentStreams: 100,
+		SettingInitialWindowSize:    2097152,
+		SettingMaxFrameSize:         16384,
+		SettingMaxHeaderListSize:    math.MaxUint32,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -755,17 +754,17 @@ var MeshAndroid = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      65536,
-		http2.SettingMaxConcurrentStreams: 1000,
-		http2.SettingInitialWindowSize:    6291456,
-		http2.SettingMaxHeaderListSize:    262144,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      65536,
+		SettingMaxConcurrentStreams: 1000,
+		SettingInitialWindowSize:    6291456,
+		SettingMaxHeaderListSize:    262144,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -858,15 +857,15 @@ var MeshIos2 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingMaxConcurrentStreams: 100,
-		http2.SettingInitialWindowSize:    2097152,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingMaxConcurrentStreams: 100,
+		SettingInitialWindowSize:    2097152,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -934,17 +933,17 @@ var MeshAndroid2 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      65536,
-		http2.SettingMaxConcurrentStreams: 1000,
-		http2.SettingInitialWindowSize:    6291456,
-		http2.SettingMaxHeaderListSize:    262144,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      65536,
+		SettingMaxConcurrentStreams: 1000,
+		SettingInitialWindowSize:    6291456,
+		SettingMaxHeaderListSize:    262144,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -1033,21 +1032,21 @@ var ConfirmedIos = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:      4096,
-		http2.SettingEnablePush:           1,
-		http2.SettingMaxConcurrentStreams: 100,
-		http2.SettingInitialWindowSize:    2097152,
-		http2.SettingMaxFrameSize:         16384,
-		http2.SettingMaxHeaderListSize:    math.MaxUint32,
+	settings: map[SettingID]uint32{
+		SettingHeaderTableSize:      4096,
+		SettingEnablePush:           1,
+		SettingMaxConcurrentStreams: 100,
+		SettingInitialWindowSize:    2097152,
+		SettingMaxFrameSize:         16384,
+		SettingMaxHeaderListSize:    math.MaxUint32,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingMaxConcurrentStreams,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxFrameSize,
-		http2.SettingMaxHeaderListSize,
+	settingsOrder: []SettingID{
+		SettingHeaderTableSize,
+		SettingEnablePush,
+		SettingMaxConcurrentStreams,
+		SettingInitialWindowSize,
+		SettingMaxFrameSize,
+		SettingMaxHeaderListSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -1112,13 +1111,13 @@ var ConfirmedAndroid = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingInitialWindowSize: 16777216,
+	settings: map[SettingID]uint32{
+		SettingInitialWindowSize: 16777216,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingInitialWindowSize,
+	settingsOrder: []SettingID{
+		SettingInitialWindowSize,
 	},
-	headerPriority: &http2.PriorityParam{},
+	headerPriority: &PriorityParam{},
 	pseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -1183,11 +1182,11 @@ var ConfirmedAndroid2 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingInitialWindowSize: 16777216,
+	settings: map[SettingID]uint32{
+		SettingInitialWindowSize: 16777216,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingInitialWindowSize,
+	settingsOrder: []SettingID{
+		SettingInitialWindowSize,
 	},
 	pseudoHeaderOrder: []string{
 		":method",
@@ -1207,13 +1206,13 @@ var Okhttp4Android13 = ClientProfile{
 			return Okhttp4Android10.GetClientHelloSpec()
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingInitialWindowSize: 16777216,
+	settings: map[SettingID]uint32{
+		SettingInitialWindowSize: 16777216,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingInitialWindowSize,
+	settingsOrder: []SettingID{
+		SettingInitialWindowSize,
 	},
-	headerPriority: &http2.PriorityParam{},
+	headerPriority: &PriorityParam{},
 	pseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -1231,13 +1230,13 @@ var Okhttp4Android12 = ClientProfile{
 			return Okhttp4Android10.GetClientHelloSpec()
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingInitialWindowSize: 16777216,
+	settings: map[SettingID]uint32{
+		SettingInitialWindowSize: 16777216,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingInitialWindowSize,
+	settingsOrder: []SettingID{
+		SettingInitialWindowSize,
 	},
-	headerPriority: &http2.PriorityParam{},
+	headerPriority: &PriorityParam{},
 	pseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -1256,13 +1255,13 @@ var Okhttp4Android11 = ClientProfile{
 			return Okhttp4Android10.GetClientHelloSpec()
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingInitialWindowSize: 16777216,
+	settings: map[SettingID]uint32{
+		SettingInitialWindowSize: 16777216,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingInitialWindowSize,
+	settingsOrder: []SettingID{
+		SettingInitialWindowSize,
 	},
-	headerPriority: &http2.PriorityParam{},
+	headerPriority: &PriorityParam{},
 	pseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -1340,13 +1339,13 @@ var Okhttp4Android10 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingInitialWindowSize: 16777216,
+	settings: map[SettingID]uint32{
+		SettingInitialWindowSize: 16777216,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingInitialWindowSize,
+	settingsOrder: []SettingID{
+		SettingInitialWindowSize,
 	},
-	headerPriority: &http2.PriorityParam{},
+	headerPriority: &PriorityParam{},
 	pseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -1411,13 +1410,13 @@ var Okhttp4Android9 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingInitialWindowSize: 16777216,
+	settings: map[SettingID]uint32{
+		SettingInitialWindowSize: 16777216,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingInitialWindowSize,
+	settingsOrder: []SettingID{
+		SettingInitialWindowSize,
 	},
-	headerPriority: &http2.PriorityParam{},
+	headerPriority: &PriorityParam{},
 	pseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -1480,13 +1479,13 @@ var Okhttp4Android8 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingInitialWindowSize: 16777216,
+	settings: map[SettingID]uint32{
+		SettingInitialWindowSize: 16777216,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingInitialWindowSize,
+	settingsOrder: []SettingID{
+		SettingInitialWindowSize,
 	},
-	headerPriority: &http2.PriorityParam{},
+	headerPriority: &PriorityParam{},
 	pseudoHeaderOrder: []string{
 		":method",
 		":path",
@@ -1551,13 +1550,13 @@ var Okhttp4Android7 = ClientProfile{
 			}, nil
 		},
 	},
-	settings: map[http2.SettingID]uint32{
-		http2.SettingInitialWindowSize: 16777216,
+	settings: map[SettingID]uint32{
+		SettingInitialWindowSize: 16777216,
 	},
-	settingsOrder: []http2.SettingID{
-		http2.SettingInitialWindowSize,
+	settingsOrder: []SettingID{
+		SettingInitialWindowSize,
 	},
-	headerPriority: &http2.PriorityParam{},
+	headerPriority: &PriorityParam{},
 	pseudoHeaderOrder: []string{
 		":method",
 		":path",

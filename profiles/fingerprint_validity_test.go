@@ -3,7 +3,6 @@ package profiles
 import (
 	"encoding/binary"
 	"fmt"
-	"net"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -112,39 +111,6 @@ func TestChrome150JA3ExtensionOrder(t *testing.T) {
 	// integration test. JA3 ignores GREASE values but preserves extension order.
 	expected := []uint16{17613, 43, 18, 65037, 51, 13, 10, 27, 23, 35, 0, 65281, 45, 11, 5, 16}
 	require.Equal(t, expected, actual)
-}
-
-func marshalProfileClientHello(profile ClientProfile) ([]byte, error) {
-	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
-	defer serverConn.Close()
-
-	config := &tls.Config{ServerName: "example.com", OmitEmptyPsk: true}
-	uConn := tls.UClient(clientConn, config, profile.GetClientHelloId(), false, false, false)
-	if err := uConn.BuildHandshakeStateWithoutSession(); err != nil {
-		return nil, err
-	}
-	if err := uConn.MarshalClientHello(); err != nil {
-		return nil, err
-	}
-	return append([]byte(nil), uConn.HandshakeState.Hello.Raw...), nil
-}
-
-func parseMarshaledClientHello(raw []byte) (*tls.ClientHelloSpec, error) {
-	if len(raw) > 0xffff {
-		return nil, fmt.Errorf("ClientHello is too large: %d bytes", len(raw))
-	}
-
-	record := make([]byte, 5, len(raw)+5)
-	record[0] = 22 // TLS handshake record
-	record[1] = 0x03
-	record[2] = 0x01
-	record[3] = byte(len(raw) >> 8)
-	record[4] = byte(len(raw))
-	record = append(record, raw...)
-
-	fingerprinter := tls.Fingerprinter{AllowBluntMimicry: true}
-	return fingerprinter.FingerprintClientHello(record)
 }
 
 func validateApplicationProtocols(spec *tls.ClientHelloSpec) error {

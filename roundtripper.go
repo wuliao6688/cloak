@@ -27,12 +27,12 @@ var errProtocolNegotiated = errors.New("protocol negotiated")
 type roundTripper struct {
 	// Embedded groups — field names promoted for backward compatibility.
 	// Group order intentionally mirrors the original field layout.
-	rtH2Params     // initialStreamID, allowHTTP, settings, headerPriority, etc.
-	rtTLSParams    // clientHelloId, certificatePinner, clientSessionCache, etc.
-	rtCacheState   // cachedConnections, cachedTransports, transportCache, locks
-	rtH2DialState  // http2DialContexts, http2DialCancels, http2DialContextSeq
-	rtH3Params     // http3Settings, http3SettingsOrder, http3PriorityParam, etc.
-	rtProtoFlags   // forceHttp1, disableHttp3, disableIPV4, disableIPV6
+	rtH2Params    // initialStreamID, allowHTTP, settings, headerPriority, etc.
+	rtTLSParams   // clientHelloId, certificatePinner, clientSessionCache, etc.
+	rtCacheState  // cachedConnections, cachedTransports, transportCache, locks
+	rtH2DialState // http2DialContexts, http2DialCancels, http2DialContextSeq
+	rtH3Params    // http3Settings, http3SettingsOrder, http3PriorityParam, etc.
+	rtProtoFlags  // forceHttp1, disableHttp3, disableIPV4, disableIPV6
 
 	dialer           proxy.ContextDialer
 	bandwidthTracker bandwidth.BandwidthTracker
@@ -773,10 +773,10 @@ func newRoundTripper(clientProfile profiles.ClientProfile, transportOptions *Tra
 		rtH2Params: rtH2Params{
 			initialStreamID:   clientProfile.GetStreamID(),
 			allowHTTP:         clientProfile.GetAllowHTTP(),
-			settings:          clientProfile.GetSettings(),
-			settingsOrder:     clientProfile.GetSettingsOrder(),
-			headerPriority:    clientProfile.GetHeaderPriority(),
-			priorities:        clientProfile.GetPriorities(),
+			settings:          profileSettings(clientProfile.GetSettings()),
+			settingsOrder:     profileSettingsOrder(clientProfile.GetSettingsOrder()),
+			headerPriority:    profilePriorityParam(clientProfile.GetHeaderPriority()),
+			priorities:        profilePriorities(clientProfile.GetPriorities()),
 			pseudoHeaderOrder: clientProfile.GetPseudoHeaderOrder(),
 			connectionFlow:    clientProfile.GetConnectionFlow(),
 		},
@@ -820,7 +820,7 @@ func newRoundTripper(clientProfile profiles.ClientProfile, transportOptions *Tra
 			insecureSkipVerify:     insecureSkipVerify,
 			serverNameOverwrite:    serverNameOverwrite,
 			transportOptions:       transportOptions,
-			settings:               clientProfile.GetSettings(),
+			settings:               profileSettings(clientProfile.GetSettings()),
 			cachedTransports:       rt.cachedTransports,
 			cachedTransportsLck:    &rt.cachedTransportsLck,
 			transportCache:         rt.transportCache,
