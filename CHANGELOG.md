@@ -1,6 +1,19 @@
 # Changelog
 
-## v1.2.0 — 商用级 DLL API
+## v1.3.0 — 商用级完整 API
+
+### 新增 DLL 导出
+- **Cookie 管理**：`tg_session_get_cookies` / `tg_session_set_cookies` / `tg_session_clear_cookies`
+- **响应头**：`tg_response_header(name)` / `tg_response_headers()` — 调试/提取 Set-Cookie
+- **错误码**：`tg_response_error_code()` — 整数码（0=成功,1=网络,2=HTTP,3=会话,4=超时,5=画像）
+- **画像切换**：`tg_session_set_profile(id)` / `tg_session_get_profile()` — 保留 Cookie jar
+- **便捷函数**：`tg_get_body(url)` / `tg_get_status(url)` — 一行代码搞定简单场景
+
+### 更新
+- `tlsgateway_api.go` — 完整重写：20 个导出函数，session 可重建
+- `tlsgateway_api.h` — 含登录场景完整例子
+- `example_e/example.e` — 6 个场景：简单GET / 完整响应 / 登录流程 / POST / 切换指纹 / 仅状态码
+- `example_python/tlsgateway.py` — Session 类：context manager / switch_profile / get/set cookies / 响应头解析
 
 ### 新增
 - **`tlsgateway_api.go`** — 零 JSON 的 CFFI API

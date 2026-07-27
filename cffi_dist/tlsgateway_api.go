@@ -3,33 +3,23 @@
 // 设计原则：
 //   1. 零 JSON — 调用方不需要构造/解析 JSON
 //   2. Session 模型 — 复用连接/Cookie，Thread-safe
-//   3. 简单 — 6 个核心函数覆盖 90% 场景
-//   4. 内存安全 — 显式 free，无泄漏
-//
-// 用法（C）:
-//   char* s = tg_session_create(TLS_PROFILE_CHROME_150, 30, NULL);
-//   TgResponse* r = tg_get(s, "https://httpbin.org/ip");
-//   printf("status=%d body=%.*s\n", tg_response_status(r), tg_response_body_len(r), tg_response_body(r));
-//   tg_response_free(r); tg_session_free(s);
-//
-// 用法（易语言）:
-//   session = tg_session_create(1, 30, "")  ' Chrome 150, 30s timeout
-//   resp = tg_get(session, "https://httpbin.org/ip")
-//   状态码 = tg_response_status(resp)
-//   返回文本 = tg_response_body(resp)
-//   tg_response_free(resp)
-//   tg_session_free(session)
+//   3. 场景驱动 — 登录流程、Cookie 管理、响应头提取一条龙
+//   4. 易语言友好 — 最少的 DLL 声明，整数错误码
+//   5. 内存安全 — 显式 free，无泄漏
 
 package main
 
 /*
 #include <stdlib.h>
 
+// TgResponse — 单次请求结果（C 堆分配，调用 tg_response_free 释放）
 typedef struct {
-	int    status;
-	char*  body;
-	int    bodyLen;
-	char*  error;
+	int    status;     // HTTP 状态码
+	int    errorCode;  // 0=成功, 1=网络错误, 2=HTTP错误, 3=会话错误, 4=超时
+	char*  body;       // 响应体（null-terminated）
+	int    bodyLen;    // 响应体长度（字节）
+	char*  headers;    // 响应头（"Key: Value\\n..." 格式，NULL=无）
+	char*  error;      // 错误描述（NULL=成功）
 } TgResponse;
 */
 import "C"
@@ -37,6 +27,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"unsafe"
@@ -45,6 +36,17 @@ import (
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/google/uuid"
+)
+
+// ─── Error Codes ──────────────────────────────────────────
+
+const (
+	errOK         = 0
+	errNetwork    = 1
+	errHTTP       = 2
+	errSession    = 3
+	errTimeout    = 4
+	errProfile    = 5
 )
 
 // ─── Session ──────────────────────────────────────────────
@@ -63,6 +65,33 @@ var (
 	apiSessionsMu sync.RWMutex
 )
 
+func (s *apiSession) rebuild() error {
+	pid := s.profileID
+	p, err := profiles.ResolveProfileID(profiles.ProfileID(pid))
+	if err != nil {
+		return err
+	}
+
+	// Preserve the cookie jar across rebuilds.
+	oldJar := s.client.GetCookieJar()
+
+	opts := []tls_client.HttpClientOption{
+		tls_client.WithTimeoutSeconds(s.timeout),
+		tls_client.WithClientProfile(p),
+		tls_client.WithCookieJar(oldJar),
+		tls_client.WithNotFollowRedirects(),
+	}
+	if s.proxy != "" {
+		opts = append(opts, tls_client.WithProxyUrl(s.proxy))
+	}
+	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
+	if err != nil {
+		return err
+	}
+	s.client = client
+	return nil
+}
+
 // ─── Core API ─────────────────────────────────────────────
 
 //export tg_session_create
@@ -76,7 +105,7 @@ func tg_session_create(profileID C.int, timeoutSeconds C.int, proxyURL *C.char) 
 
 	p, err := profiles.ResolveProfileID(profiles.ProfileID(pid))
 	if err != nil {
-		return cString(fmt.Sprintf("ERR: unknown profile ID %d", pid))
+		return cString(fmt.Sprintf("ERR:%d: unknown profile %d", errProfile, pid))
 	}
 
 	proxy := ""
@@ -97,7 +126,7 @@ func tg_session_create(profileID C.int, timeoutSeconds C.int, proxyURL *C.char) 
 
 	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
 	if err != nil {
-		return cString(fmt.Sprintf("ERR: %v", err))
+		return cString(fmt.Sprintf("ERR:%d: %v", errSession, err))
 	}
 
 	s := &apiSession{
@@ -123,11 +152,127 @@ func tg_session_free(sessionID *C.char) {
 	apiSessionsMu.Unlock()
 }
 
-// ─── Request API ──────────────────────────────────────────
+// ─── Profile Management ───────────────────────────────────
+
+//export tg_session_set_profile
+func tg_session_set_profile(sessionID *C.char, profileID C.int) C.int {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok {
+		return errSession
+	}
+	s.mu.Lock()
+	s.profileID = int(profileID)
+	err := s.rebuild()
+	s.mu.Unlock()
+	if err != nil {
+		return errProfile
+	}
+	return errOK
+}
+
+//export tg_session_get_profile
+func tg_session_get_profile(sessionID *C.char) C.int {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok {
+		return -1
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return C.int(s.profileID)
+}
+
+// ─── Cookie Management ────────────────────────────────────
+
+//export tg_session_get_cookies
+func tg_session_get_cookies(sessionID *C.char, requestURL *C.char) *C.char {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok {
+		return nil
+	}
+
+	u, err := url.Parse(C.GoString(requestURL))
+	if err != nil {
+		return nil
+	}
+
+	s.mu.Lock()
+	cookies := s.client.GetCookies(u)
+	s.mu.Unlock()
+
+	// Format: "name1=value1; name2=value2"
+	var parts []string
+	for _, c := range cookies {
+		parts = append(parts, c.Name+"="+c.Value)
+	}
+	return cString(strings.Join(parts, "; "))
+}
+
+//export tg_session_set_cookies
+func tg_session_set_cookies(sessionID *C.char, requestURL *C.char, cookies *C.char) C.int {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok {
+		return errSession
+	}
+
+	u, err := url.Parse(C.GoString(requestURL))
+	if err != nil {
+		return errNetwork
+	}
+
+	cookieStr := C.GoString(cookies)
+	var httpCookies []*http.Cookie
+	for _, pair := range strings.Split(cookieStr, ";") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, "=", 2)
+		c := &http.Cookie{Name: strings.TrimSpace(parts[0])}
+		if len(parts) == 2 {
+			c.Value = strings.TrimSpace(parts[1])
+		}
+		httpCookies = append(httpCookies, c)
+	}
+
+	s.mu.Lock()
+	s.client.SetCookies(u, httpCookies)
+	s.mu.Unlock()
+	return errOK
+}
+
+//export tg_session_clear_cookies
+func tg_session_clear_cookies(sessionID *C.char) C.int {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok {
+		return errSession
+	}
+	s.mu.Lock()
+	jar := tls_client.NewCookieJar()
+	s.client.SetCookieJar(jar)
+	s.mu.Unlock()
+	return errOK
+}
+
+// ─── Requests ─────────────────────────────────────────────
 
 //export tg_get
 func tg_get(sessionID *C.char, requestURL *C.char) *C.TgResponse {
-	return apiRequest(sessionID, "GET", C.GoString(requestURL), nil, nil)
+	return apiRequest(sessionID, "GET", requestURL, nil, nil)
 }
 
 //export tg_post
@@ -137,7 +282,7 @@ func tg_post(sessionID *C.char, requestURL *C.char, body *C.char) *C.TgResponse 
 		s := C.GoString(body)
 		b = &s
 	}
-	return apiRequest(sessionID, "POST", C.GoString(requestURL), b, nil)
+	return apiRequest(sessionID, "POST", requestURL, b, nil)
 }
 
 //export tg_request
@@ -152,68 +297,109 @@ func tg_request(sessionID *C.char, method *C.char, requestURL *C.char, headers *
 		s := C.GoString(headers)
 		h = &s
 	}
-	return apiRequest(sessionID, C.GoString(method), C.GoString(requestURL), b, h)
+	return apiRequest(sessionID, C.GoString(method), requestURL, b, h)
+}
+
+// ─── Convenience ──────────────────────────────────────────
+
+//export tg_get_body
+func tg_get_body(sessionID *C.char, requestURL *C.char) *C.char {
+	r := tg_get(sessionID, requestURL)
+	if r == nil || r.errorCode != errOK {
+		if r != nil {
+			tg_response_free(r)
+		}
+		return nil
+	}
+	body := C.CString(C.GoString(r.body))
+	tg_response_free(r)
+	return body
+}
+
+//export tg_get_status
+func tg_get_status(sessionID *C.char, requestURL *C.char) C.int {
+	r := tg_get(sessionID, requestURL)
+	if r == nil {
+		return 0
+	}
+	s := r.status
+	tg_response_free(r)
+	return s
 }
 
 // ─── Response Access ──────────────────────────────────────
 
 //export tg_response_status
 func tg_response_status(r *C.TgResponse) C.int {
-	if r == nil {
-		return 0
-	}
+	if r == nil { return 0 }
 	return r.status
 }
 
 //export tg_response_body
 func tg_response_body(r *C.TgResponse) *C.char {
-	if r == nil {
-		return nil
-	}
+	if r == nil { return nil }
 	return r.body
 }
 
 //export tg_response_body_len
 func tg_response_body_len(r *C.TgResponse) C.int {
-	if r == nil {
-		return 0
-	}
+	if r == nil { return 0 }
 	return r.bodyLen
+}
+
+//export tg_response_headers
+func tg_response_headers(r *C.TgResponse) *C.char {
+	if r == nil { return nil }
+	return r.headers
+}
+
+//export tg_response_header
+func tg_response_header(r *C.TgResponse, name *C.char) *C.char {
+	if r == nil || r.headers == nil { return nil }
+	key := C.GoString(name)
+	for _, line := range strings.Split(C.GoString(r.headers), "\n") {
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 && strings.EqualFold(strings.TrimSpace(parts[0]), key) {
+			return cString(strings.TrimSpace(parts[1]))
+		}
+	}
+	return nil
 }
 
 //export tg_response_error
 func tg_response_error(r *C.TgResponse) *C.char {
-	if r == nil {
-		return nil
-	}
+	if r == nil { return nil }
 	return r.error
+}
+
+//export tg_response_error_code
+func tg_response_error_code(r *C.TgResponse) C.int {
+	if r == nil { return -1 }
+	return r.errorCode
 }
 
 //export tg_response_free
 func tg_response_free(r *C.TgResponse) {
-	if r == nil {
-		return
-	}
-	if r.body != nil {
-		C.free(unsafe.Pointer(r.body))
-	}
-	if r.error != nil {
-		C.free(unsafe.Pointer(r.error))
-	}
+	if r == nil { return }
+	if r.body != nil    { C.free(unsafe.Pointer(r.body)) }
+	if r.headers != nil { C.free(unsafe.Pointer(r.headers)) }
+	if r.error != nil   { C.free(unsafe.Pointer(r.error)) }
 	C.free(unsafe.Pointer(r))
 }
 
 // ─── Internal ─────────────────────────────────────────────
 
-func apiRequest(sessionID *C.char, method, urlStr string, body, headers *string) *C.TgResponse {
+func apiRequest(sessionID *C.char, method string, requestURL *C.char, body, headers *string) *C.TgResponse {
 	id := C.GoString(sessionID)
 
 	apiSessionsMu.RLock()
 	s, ok := apiSessions[id]
 	apiSessionsMu.RUnlock()
 	if !ok {
-		return cErrorResponse(fmt.Sprintf("session not found: %s", id))
+		return cErrorResponse(errSession, "session not found")
 	}
+
+	urlStr := C.GoString(requestURL)
 
 	s.mu.Lock()
 	client := s.client
@@ -227,21 +413,17 @@ func apiRequest(sessionID *C.char, method, urlStr string, body, headers *string)
 		req, err = http.NewRequest(method, urlStr, nil)
 	}
 	if err != nil {
-		return cErrorResponse(fmt.Sprintf("build request: %v", err))
+		return cErrorResponse(errHTTP, fmt.Sprintf("build request: %v", err))
 	}
 
-	// Parse URL for cookie handling
 	if reqURL, parseErr := url.Parse(urlStr); parseErr == nil {
 		req.URL = reqURL
 	}
 
-	// Apply per-request headers
 	if headers != nil {
 		for _, line := range strings.Split(*headers, "\n") {
 			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
+			if line == "" { continue }
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
 				req.Header.Set(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
@@ -251,48 +433,69 @@ func apiRequest(sessionID *C.char, method, urlStr string, body, headers *string)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return cErrorResponse(fmt.Sprintf("request: %v", err))
+		code := errNetwork
+		errStr := err.Error()
+		if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline") {
+			code = errTimeout
+		}
+		return cErrorResponse(C.int(code), fmt.Sprintf("request: %v", err))
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return cErrorResponse(fmt.Sprintf("read body: %v", err))
+		return cErrorResponse(errHTTP, fmt.Sprintf("read body: %v", err))
 	}
 
-	return cResponse(resp.StatusCode, respBody)
+	// Format response headers
+	var headerLines []string
+	keys := make([]string, 0, len(resp.Header))
+	for k := range resp.Header {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		for _, v := range resp.Header[k] {
+			headerLines = append(headerLines, k+": "+v)
+		}
+	}
+
+	var headerStr *C.char
+	if len(headerLines) > 0 {
+		headerStr = cString(strings.Join(headerLines, "\n"))
+	}
+
+	return cResponse(resp.StatusCode, respBody, headerStr)
 }
 
-func cResponse(status int, body []byte) *C.TgResponse {
+func cResponse(status int, body []byte, headerStr *C.char) *C.TgResponse {
 	r := (*C.TgResponse)(C.malloc(C.size_t(unsafe.Sizeof(C.TgResponse{}))))
 	r.status = C.int(status)
+	r.errorCode = errOK
 	r.bodyLen = C.int(len(body))
 	r.body = cStringFromBytes(body)
+	r.headers = headerStr
 	r.error = nil
 	return r
 }
 
-func cErrorResponse(msg string) *C.TgResponse {
+func cErrorResponse(code C.int, msg string) *C.TgResponse {
 	r := (*C.TgResponse)(C.malloc(C.size_t(unsafe.Sizeof(C.TgResponse{}))))
 	r.status = 0
+	r.errorCode = code
 	r.bodyLen = 0
 	r.body = nil
+	r.headers = nil
 	r.error = cString(msg)
 	return r
 }
 
-func cString(s string) *C.char {
-	return C.CString(s)
-}
+func cString(s string) *C.char { return C.CString(s) }
 
 func cStringFromBytes(value []byte) *C.char {
-	if len(value) == 0 {
-		return C.CString("")
-	}
+	if len(value) == 0 { return C.CString("") }
 	buffer := C.malloc(C.size_t(len(value) + 1))
-	if buffer == nil {
-		return nil
-	}
+	if buffer == nil { return nil }
 	bytes := unsafe.Slice((*byte)(buffer), len(value)+1)
 	copy(bytes, value)
 	bytes[len(value)] = 0
