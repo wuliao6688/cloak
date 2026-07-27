@@ -31,8 +31,10 @@ func TestRoundTripperClosesRequestBodyWhenTransportInitializationFails(t *testin
 	}
 
 	rt := &roundTripper{
-		cachedConnections: make(map[string]net.Conn),
-		cachedTransports:  make(map[string]http.RoundTripper),
+		rtCacheState: rtCacheState{
+			cachedConnections: make(map[string]net.Conn),
+			cachedTransports:  make(map[string]http.RoundTripper),
+		},
 	}
 	if _, err := rt.RoundTrip(req); err == nil {
 		t.Fatal("invalid scheme should fail transport initialization")
@@ -85,9 +87,11 @@ func TestRoundTripperCloseIdleConnectionsResetsSharedCaches(t *testing.T) {
 		transportInit:       &keyedLockPool{},
 	}
 	rt := &roundTripper{
-		cachedConnections: make(map[string]net.Conn),
-		cachedTransports:  oldMap,
-		racer:             racer,
+		rtCacheState: rtCacheState{
+			cachedConnections: make(map[string]net.Conn),
+			cachedTransports:  oldMap,
+		},
+		racer: racer,
 	}
 
 	rt.CloseIdleConnections()
@@ -113,8 +117,10 @@ func TestRoundTripperTransportCacheUsesLRUEviction(t *testing.T) {
 	second := &closeIdleTrackingTransport{}
 	third := &closeIdleTrackingTransport{}
 	rt := &roundTripper{
-		cachedTransports: make(map[string]http.RoundTripper),
-		transportCache:   newTransportCacheMeta(2),
+		rtCacheState: rtCacheState{
+			cachedTransports: make(map[string]http.RoundTripper),
+			transportCache:   newTransportCacheMeta(2),
+		},
 	}
 
 	rt.setCachedTransport("first", first)
@@ -134,8 +140,10 @@ func TestRoundTripperTransportCacheUsesLRUEviction(t *testing.T) {
 
 func BenchmarkTransportCacheHitParallel(b *testing.B) {
 	rt := &roundTripper{
-		cachedTransports: make(map[string]http.RoundTripper),
-		transportCache:   newTransportCacheMeta(8),
+		rtCacheState: rtCacheState{
+			cachedTransports: make(map[string]http.RoundTripper),
+			transportCache:   newTransportCacheMeta(8),
+		},
 	}
 	rt.setCachedTransport("example.com:443", &closeIdleTrackingTransport{})
 
@@ -151,8 +159,10 @@ func BenchmarkTransportCacheHitParallel(b *testing.B) {
 
 func BenchmarkHTTP2DialContextRegistrationParallel(b *testing.B) {
 	rt := &roundTripper{
-		http2DialContexts: make(map[string]map[uint64]context.Context),
-		http2DialCancels:  make(map[string]map[uint64]context.CancelFunc),
+		rtH2DialState: rtH2DialState{
+			http2DialContexts: make(map[string]map[uint64]context.Context),
+			http2DialCancels:  make(map[string]map[uint64]context.CancelFunc),
+		},
 	}
 	ctx := context.Background()
 	b.ReportAllocs()
@@ -175,8 +185,10 @@ func TestHTTP2DialContextRegistrationSkipsCancellationWatchForBackground(t *test
 
 func TestTransportCacheConcurrentHitsAndEvictions(t *testing.T) {
 	rt := &roundTripper{
-		cachedTransports: make(map[string]http.RoundTripper),
-		transportCache:   newTransportCacheMeta(8),
+		rtCacheState: rtCacheState{
+			cachedTransports: make(map[string]http.RoundTripper),
+			transportCache:   newTransportCacheMeta(8),
+		},
 	}
 	for i := 0; i < 8; i++ {
 		rt.setCachedTransport(fmt.Sprintf("seed-%d", i), &closeIdleTrackingTransport{})
@@ -215,8 +227,10 @@ func TestHTTP3LRUEvictionWaitsForActiveResponseBody(t *testing.T) {
 	underlying := &closeTrackingHTTP3Transport{body: newCloseTrackingBody()}
 	http3Transport := newRetiringHTTP3Transport(underlying)
 	rt := &roundTripper{
-		cachedTransports: make(map[string]http.RoundTripper),
-		transportCache:   newTransportCacheMeta(1),
+		rtCacheState: rtCacheState{
+			cachedTransports: make(map[string]http.RoundTripper),
+			transportCache:   newTransportCacheMeta(1),
+		},
 	}
 	rt.setCachedTransport("first:h3", http3Transport)
 
@@ -286,8 +300,10 @@ func TestRetiredHTTP3TransportRejectsNewRequestsWhileDraining(t *testing.T) {
 
 func TestHTTP2RedialUsesActiveRequestContext(t *testing.T) {
 	rt := &roundTripper{
-		cachedConnections: make(map[string]net.Conn),
-		dialer:            &contextErrorDialer{},
+		rtCacheState: rtCacheState{
+			cachedConnections: make(map[string]net.Conn),
+		},
+		dialer: &contextErrorDialer{},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	registration := rt.registerHTTP2DialContext("example.com:443", ctx)

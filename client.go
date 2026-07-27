@@ -152,35 +152,35 @@ func NewHttpClient(logger Logger, options ...HttpClientOption) (HttpClient, erro
 
 func validateConfig(config *httpClientConfig) error {
 	if config.enableProtocolRacing && config.disableHttp3 {
-		return fmt.Errorf("invalid config: HTTP/3 racing cannot be enabled when HTTP/3 is disabled")
+		return fmt.Errorf("%w: HTTP/3 racing cannot be enabled when HTTP/3 is disabled", ErrRacingNotSupported)
 	}
 
 	if config.enableProtocolRacing && config.forceHttp1 {
-		return fmt.Errorf("invalid config: HTTP/3 racing cannot be enabled when HTTP/1 is forced")
+		return fmt.Errorf("%w: HTTP/3 racing cannot be enabled when HTTP/1 is forced", ErrRacingNotSupported)
 	}
 
 	if config.enableProtocolRacing && (config.proxyUrl != "" || config.proxyDialerFactory != nil) {
-		return fmt.Errorf("invalid config: HTTP/3 racing cannot be combined with a TCP proxy because the HTTP/3 attempt would bypass it")
+		return fmt.Errorf("%w: HTTP/3 racing cannot be combined with a TCP proxy because the HTTP/3 attempt would bypass it", ErrRacingNotSupported)
 	}
 
 	if config.enableProtocolRacing && config.dialContext != nil {
-		return fmt.Errorf("invalid config: HTTP/3 racing cannot be combined with a custom TCP DialContext")
+		return fmt.Errorf("%w: HTTP/3 racing cannot be combined with a custom TCP DialContext", ErrRacingNotSupported)
 	}
 
 	if config.enableProtocolRacing && config.localAddr != nil {
-		return fmt.Errorf("invalid config: HTTP/3 racing cannot enforce WithLocalAddr on the QUIC attempt")
+		return fmt.Errorf("%w: HTTP/3 racing cannot enforce WithLocalAddr on the QUIC attempt", ErrRacingNotSupported)
 	}
 
 	if config.enableProtocolRacing && (config.disableIPV4 || config.disableIPV6) {
-		return fmt.Errorf("invalid config: HTTP/3 racing cannot enforce IP-family restrictions on the QUIC attempt")
+		return fmt.Errorf("%w: HTTP/3 racing cannot enforce IP-family restrictions on the QUIC attempt", ErrRacingNotSupported)
 	}
 
 	if config.enableProtocolRacing && len(config.certificatePins) > 0 {
-		return fmt.Errorf("invalid config: HTTP/3 racing cannot be combined with certificate pinning until QUIC pin verification is configured")
+		return fmt.Errorf("%w: HTTP/3 racing cannot be combined with certificate pinning until QUIC pin verification is configured", ErrRacingNotSupported)
 	}
 
 	if config.enableProtocolRacing && config.enabledBandwidthTracker {
-		return fmt.Errorf("invalid config: HTTP/3 racing cannot be combined with bandwidth tracking until QUIC traffic is tracked")
+		return fmt.Errorf("%w: HTTP/3 racing cannot be combined with bandwidth tracking until QUIC traffic is tracked", ErrRacingNotSupported)
 	}
 
 	if config.debugBodyLimit < 0 {
@@ -401,7 +401,7 @@ func (c *httpClient) SetProxy(proxyUrl string) error {
 		return nil
 	}
 	if proxyUrl != "" && enableProtocolRacing {
-		return errors.New("HTTP/3 racing cannot be combined with a TCP proxy because the HTTP/3 attempt would bypass it")
+		return ErrRacingNotSupported
 	}
 	if proxyUrl != "" && hasCustomDialContext {
 		return errors.New("a proxy cannot be applied dynamically when WithDialContext is configured")
@@ -655,7 +655,7 @@ func (c *httpClient) runPostHook(hook PostResponseHookFunc, ctx *PostResponseCon
 // If the returned error is nil, the response contains a non-nil body, which the user is expected to close.
 func (c *httpClient) Do(req *http.Request) (*http.Response, error) {
 	if req == nil {
-		return nil, errors.New("request must not be nil")
+		return nil, ErrRequestNil
 	}
 
 	if err := c.executePreHooks(req); err != nil {

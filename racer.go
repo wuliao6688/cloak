@@ -45,6 +45,8 @@ type protocolRacer struct {
 	http3SendGreaseFrames  bool
 }
 
+// newProtocolRacer is kept for backward compatibility with external callers.
+// Prefer protocolRacerConfig.toRacer() for new code.
 func newProtocolRacer(
 	clientSessionCache tls.ClientSessionCache,
 	insecureSkipVerify bool,
@@ -64,8 +66,7 @@ func newProtocolRacer(
 	http3PseudoHeaderOrder []string,
 	http3SendGreaseFrames bool,
 ) *protocolRacer {
-	return &protocolRacer{
-		protocolCache:          make(map[string]string),
+	return (&protocolRacerConfig{
 		clientSessionCache:     clientSessionCache,
 		insecureSkipVerify:     insecureSkipVerify,
 		serverNameOverwrite:    serverNameOverwrite,
@@ -83,7 +84,7 @@ func newProtocolRacer(
 		http3PriorityParam:     http3PriorityParam,
 		http3PseudoHeaderOrder: http3PseudoHeaderOrder,
 		http3SendGreaseFrames:  http3SendGreaseFrames,
-	}
+	}).toRacer()
 }
 
 // race races HTTP/3 and HTTP/2 connections and uses whichever responds first.
@@ -352,7 +353,7 @@ func (pr *protocolRacer) waitForRaceWinner(ctx context.Context, addr string, res
 	if lastErr != nil {
 		return nil, lastErr
 	}
-	return nil, errors.New("http3 racing: both protocols failed to connect")
+	return nil, ErrRacingBothProtocolsFailed
 }
 
 func (pr *protocolRacer) getTransportKey(protocol, addr string) string {
@@ -424,7 +425,7 @@ func cloneRequestForRace(req *http.Request, ctx context.Context) (*http.Request,
 		return cloned, nil
 	}
 	if req.GetBody == nil {
-		return nil, errors.New("http3 racing requires a replayable request body")
+		return nil, ErrRequestBodyNotReplayable
 	}
 	body, err := req.GetBody()
 	if err != nil {

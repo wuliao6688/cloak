@@ -25,56 +25,21 @@ const DefaultTLSClientSessionCacheSize = 32
 var errProtocolNegotiated = errors.New("protocol negotiated")
 
 type roundTripper struct {
-	initialStreamID   uint32
-	allowHTTP         bool
-	clientHelloId     tls.ClientHelloID
-	certificatePinner CertificatePinner
+	// Embedded groups — field names promoted for backward compatibility.
+	// Group order intentionally mirrors the original field layout.
+	rtH2Params     // initialStreamID, allowHTTP, settings, headerPriority, etc.
+	rtTLSParams    // clientHelloId, certificatePinner, clientSessionCache, etc.
+	rtCacheState   // cachedConnections, cachedTransports, transportCache, locks
+	rtH2DialState  // http2DialContexts, http2DialCancels, http2DialContextSeq
+	rtH3Params     // http3Settings, http3SettingsOrder, http3PriorityParam, etc.
+	rtProtoFlags   // forceHttp1, disableHttp3, disableIPV4, disableIPV6
 
-	dialer proxy.ContextDialer
-
+	dialer           proxy.ContextDialer
 	bandwidthTracker bandwidth.BandwidthTracker
-
-	clientSessionCache tls.ClientSessionCache
-
-	badPinHandlerFunc BadPinHandlerFunc
-	cachedConnections map[string]net.Conn
-	cachedTransports  map[string]http.RoundTripper
-	transportCache    *transportCacheMeta
-
-	headerPriority      *http2.PriorityParam
-	settings            map[http2.SettingID]uint32
-	transportOptions    *TransportOptions
-	serverNameOverwrite string
-	priorities          []http2.Priority
-	pseudoHeaderOrder   []string
-	settingsOrder       []http2.SettingID
-
-	cachedConnectionsLck sync.Mutex
-	cachedTransportsLck  sync.RWMutex
-	transportInit        keyedLockPool
-	http2DialContextsLck sync.Mutex
-	http2DialContexts    map[string]map[uint64]context.Context
-	http2DialCancels     map[string]map[uint64]context.CancelFunc
-	http2DialContextSeq  uint64
-	connectionFlow       uint32
-
-	forceHttp1   bool
-	disableHttp3 bool
+	transportOptions *TransportOptions
 
 	// racer handles HTTP/3 racing (nil if racing is disabled)
 	racer *protocolRacer
-
-	// HTTP/3 specific settings
-	http3Settings          map[uint64]uint64
-	http3SettingsOrder     []uint64
-	http3PriorityParam     uint32
-	http3PseudoHeaderOrder []string
-	http3SendGreaseFrames  bool
-
-	insecureSkipVerify          bool
-	withRandomTlsExtensionOrder bool
-	disableIPV6                 bool
-	disableIPV4                 bool
 }
 
 // http3Config contains all parameters needed to build an HTTP/3 transport
@@ -802,61 +767,73 @@ func newRoundTripper(clientProfile profiles.ClientProfile, transportOptions *Tra
 	}
 
 	rt := &roundTripper{
-		dialer:                      selectedDialer,
-		certificatePinner:           pinner,
-		badPinHandlerFunc:           badPinHandlerFunc,
-		transportOptions:            transportOptions,
-		clientSessionCache:          clientSessionCache,
-		serverNameOverwrite:         serverNameOverwrite,
-		settings:                    clientProfile.GetSettings(),
-		settingsOrder:               clientProfile.GetSettingsOrder(),
-		priorities:                  clientProfile.GetPriorities(),
-		headerPriority:              clientProfile.GetHeaderPriority(),
-		pseudoHeaderOrder:           clientProfile.GetPseudoHeaderOrder(),
-		insecureSkipVerify:          insecureSkipVerify,
-		forceHttp1:                  forceHttp1,
-		disableHttp3:                disableHttp3,
-		withRandomTlsExtensionOrder: withRandomTlsExtensionOrder,
-		connectionFlow:              clientProfile.GetConnectionFlow(),
-		clientHelloId:               clientProfile.GetClientHelloId(),
-		cachedTransports:            make(map[string]http.RoundTripper),
-		transportCache:              newTransportCacheMeta(maxCachedTransports(transportOptions)),
-		cachedConnections:           make(map[string]net.Conn),
-		http2DialContexts:           make(map[string]map[uint64]context.Context),
-		http2DialCancels:            make(map[string]map[uint64]context.CancelFunc),
-		disableIPV6:                 disableIPV6,
-		disableIPV4:                 disableIPV4,
-		bandwidthTracker:            bandwidthTracker,
-		initialStreamID:             clientProfile.GetStreamID(),
-		allowHTTP:                   clientProfile.GetAllowHTTP(),
-		http3Settings:               clientProfile.GetHttp3Settings(),
-		http3SettingsOrder:          clientProfile.GetHttp3SettingsOrder(),
-		http3PriorityParam:          clientProfile.GetHttp3PriorityParam(),
-		http3PseudoHeaderOrder:      clientProfile.GetHttp3PseudoHeaderOrder(),
-		http3SendGreaseFrames:       clientProfile.GetHttp3SendGreaseFrames(),
+		dialer:           selectedDialer,
+		transportOptions: transportOptions,
+		bandwidthTracker: bandwidthTracker,
+		rtH2Params: rtH2Params{
+			initialStreamID:   clientProfile.GetStreamID(),
+			allowHTTP:         clientProfile.GetAllowHTTP(),
+			settings:          clientProfile.GetSettings(),
+			settingsOrder:     clientProfile.GetSettingsOrder(),
+			headerPriority:    clientProfile.GetHeaderPriority(),
+			priorities:        clientProfile.GetPriorities(),
+			pseudoHeaderOrder: clientProfile.GetPseudoHeaderOrder(),
+			connectionFlow:    clientProfile.GetConnectionFlow(),
+		},
+		rtTLSParams: rtTLSParams{
+			clientHelloId:               clientProfile.GetClientHelloId(),
+			certificatePinner:           pinner,
+			clientSessionCache:          clientSessionCache,
+			serverNameOverwrite:         serverNameOverwrite,
+			insecureSkipVerify:          insecureSkipVerify,
+			withRandomTlsExtensionOrder: withRandomTlsExtensionOrder,
+			badPinHandlerFunc:           badPinHandlerFunc,
+		},
+		rtCacheState: rtCacheState{
+			cachedTransports:  make(map[string]http.RoundTripper),
+			transportCache:    newTransportCacheMeta(maxCachedTransports(transportOptions)),
+			cachedConnections: make(map[string]net.Conn),
+		},
+		rtH2DialState: rtH2DialState{
+			http2DialContexts: make(map[string]map[uint64]context.Context),
+			http2DialCancels:  make(map[string]map[uint64]context.CancelFunc),
+		},
+		rtH3Params: rtH3Params{
+			http3Settings:          clientProfile.GetHttp3Settings(),
+			http3SettingsOrder:     clientProfile.GetHttp3SettingsOrder(),
+			http3PriorityParam:     clientProfile.GetHttp3PriorityParam(),
+			http3PseudoHeaderOrder: clientProfile.GetHttp3PseudoHeaderOrder(),
+			http3SendGreaseFrames:  clientProfile.GetHttp3SendGreaseFrames(),
+		},
+		rtProtoFlags: rtProtoFlags{
+			forceHttp1:   forceHttp1,
+			disableHttp3: disableHttp3,
+			disableIPV4:  disableIPV4,
+			disableIPV6:  disableIPV6,
+		},
 	}
 
 	// Create protocol racer if HTTP/3 racing is enabled
 	if enableH3Racing {
-		rt.racer = newProtocolRacer(
-			clientSessionCache,
-			insecureSkipVerify,
-			serverNameOverwrite,
-			transportOptions,
-			clientProfile.GetSettings(),
-			rt.cachedTransports,
-			&rt.cachedTransportsLck,
-			rt.transportCache,
-			&rt.transportInit,
-			pinner,
-			badPinHandlerFunc,
-			bandwidthTracker,
-			clientProfile.GetHttp3Settings(),
-			clientProfile.GetHttp3SettingsOrder(),
-			clientProfile.GetHttp3PriorityParam(),
-			clientProfile.GetHttp3PseudoHeaderOrder(),
-			clientProfile.GetHttp3SendGreaseFrames(),
-		)
+		rt.racer = (&protocolRacerConfig{
+			clientSessionCache:     clientSessionCache,
+			insecureSkipVerify:     insecureSkipVerify,
+			serverNameOverwrite:    serverNameOverwrite,
+			transportOptions:       transportOptions,
+			settings:               clientProfile.GetSettings(),
+			cachedTransports:       rt.cachedTransports,
+			cachedTransportsLck:    &rt.cachedTransportsLck,
+			transportCache:         rt.transportCache,
+			transportInit:          &rt.transportInit,
+			certificatePinner:      pinner,
+			badPinHandlerFunc:      badPinHandlerFunc,
+			bandwidthTracker:       bandwidthTracker,
+			http3Settings:          clientProfile.GetHttp3Settings(),
+			http3SettingsOrder:     clientProfile.GetHttp3SettingsOrder(),
+			http3PriorityParam:     clientProfile.GetHttp3PriorityParam(),
+			http3PseudoHeaderOrder: clientProfile.GetHttp3PseudoHeaderOrder(),
+			http3SendGreaseFrames:  clientProfile.GetHttp3SendGreaseFrames(),
+		}).toRacer()
 	}
 
 	return rt, nil

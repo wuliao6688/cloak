@@ -27,11 +27,3 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-// replace github.com/bogdanfinn/utls => ../utls
-
-// replace github.com/bogdanfinn/quic-go-utls => ../quic-go-utls
-
-// replace github.com/bogdanfinn/websocket => ../websocket
-
-// replace github.com/bogdanfinn/fhttp => ../fhttp
