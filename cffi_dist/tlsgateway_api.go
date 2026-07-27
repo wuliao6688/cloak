@@ -644,12 +644,3 @@ func cErrorResponse(code C.int, msg string) *C.TgResponse {
 
 func cString(s string) *C.char { return C.CString(s) }
 
-func cStringFromBytes(value []byte) *C.char {
-	if len(value) == 0 { return C.CString("") }
-	buffer := C.malloc(C.size_t(len(value) + 1))
-	if buffer == nil { return nil }
-	bytes := unsafe.Slice((*byte)(buffer), len(value)+1)
-	copy(bytes, value)
-	bytes[len(value)] = 0
-	return (*C.char)(buffer)
-}
