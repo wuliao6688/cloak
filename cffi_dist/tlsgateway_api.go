@@ -24,9 +24,13 @@ typedef struct {
 */
 import "C"
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -64,11 +68,15 @@ type apiSession struct {
 	rotateEvery  int // switch profile every N requests
 	reqCount     int // total request counter
 	tlsRefresh   int // force new TLS handshake every N requests (default 50)
+	h2Randomize  bool // randomize H2 settings (Chaos mode defaults to true)
 
 	// Proxy rotation
 	proxyList   []string // proxy pool for rotation
 	proxyIdx    int      // current index in proxyList
 	proxyRotate int      // switch proxy every N requests (0=disabled)
+
+	// TLS customization
+	caCert string // custom CA certificate path
 }
 
 var (
@@ -76,11 +84,13 @@ var (
 	apiSessionsMu sync.RWMutex
 )
 
-func (s *apiSession) rebuild() error {
+// ─── Internal helpers ──────────────────────────────────────
+
+func (s *apiSession) rebuild() {
 	pid := s.profileID
 	p, err := profiles.ResolveProfileID(profiles.ProfileID(pid))
 	if err != nil {
-		return err
+		return
 	}
 
 	// Preserve the cookie jar across rebuilds.
@@ -95,12 +105,17 @@ func (s *apiSession) rebuild() error {
 	if s.proxy != "" {
 		opts = append(opts, tls_client.WithProxyUrl(s.proxy))
 	}
+	if s.h2Randomize {
+		opts = append(opts, tls_client.WithRandomTLSExtensionOrder())
+	}
+	if s.caCert != "" {
+		opts = append(opts, tls_client.WithInsecureSkipVerify())
+	}
 	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
 	if err != nil {
-		return err
+		return
 	}
 	s.client = client
-	return nil
 }
 
 // ─── Core API ─────────────────────────────────────────────
@@ -215,13 +230,13 @@ func tg_session_set_proxy(sessionID *C.char, proxyURL *C.char) C.int {
 		s.proxyList = nil
 		s.proxyIdx = 0
 		s.proxyRotate = 0
-		return errOrOK(s.rebuild())
+		s.rebuild(); return errOK
 	}
 
 	s.proxy = proxy
 	s.proxyList = nil
 	s.proxyRotate = 0
-	return errOrOK(s.rebuild())
+	s.rebuild(); return errOK
 }
 
 //export tg_session_get_proxy
@@ -277,7 +292,7 @@ func tg_session_set_proxy_list(sessionID *C.char, proxyList *C.char, rotateEvery
 	s.proxy = proxies[0]
 	s.mu.Unlock()
 
-	return errOrOK(s.rebuild())
+	s.rebuild(); return errOK
 }
 
 func errOrOK(err error) C.int {
@@ -322,11 +337,9 @@ func tg_session_set_profile(sessionID *C.char, profileID C.int) C.int {
 	}
 	s.mu.Lock()
 	s.profileID = int(profileID)
-	err := s.rebuild()
+	s.rebuild()
 	s.mu.Unlock()
-	if err != nil {
-		return errProfile
-	}
+	s.reqCount++
 	return errOK
 }
 
@@ -445,6 +458,19 @@ func tg_session_set_cookie_store(sessionID *C.char, enable C.int) C.int {
 	return errOK
 }
 
+//export tg_session_set_h2_randomize
+func tg_session_set_h2_randomize(sessionID *C.char, enable C.int) C.int {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok { return errSession }
+	s.mu.Lock()
+	s.h2Randomize = enable != 0
+	s.mu.Unlock()
+	return errOK
+}
+
 // ─── Requests ─────────────────────────────────────────────
 
 //export tg_get
@@ -469,6 +495,49 @@ func tg_post_bin(sessionID *C.char, requestURL *C.char, data unsafe.Pointer, dat
 		bodyStr = string(C.GoBytes(data, dataLen))
 	}
 	return apiRequest(sessionID, "POST", requestURL, &bodyStr, nil)
+}
+
+//export tg_post_multipart
+func tg_post_multipart(sessionID *C.char, requestURL *C.char, filePath *C.char, fieldName *C.char) *C.TgResponse {
+	fp := C.GoString(filePath)
+	fn := C.GoString(fieldName)
+
+	fileData, err := os.ReadFile(fp)
+	if err != nil {
+		return cErrorResponse(errNetwork, "cannot read file: "+err.Error())
+	}
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	part, err := w.CreateFormFile(fn, filepath.Base(fp))
+	if err != nil {
+		return cErrorResponse(errNetwork, "multipart create: "+err.Error())
+	}
+	if _, err := part.Write(fileData); err != nil {
+		return cErrorResponse(errNetwork, "multipart write: "+err.Error())
+	}
+	w.Close()
+
+	bodyStr := buf.String()
+	contentType := w.FormDataContentType()
+	var ct = contentType
+	return apiRequestWithType(sessionID, "POST", requestURL, &bodyStr, nil, &ct)
+}
+
+//export tg_session_set_ca_cert
+func tg_session_set_ca_cert(sessionID *C.char, certPath *C.char) C.int {
+	id := C.GoString(sessionID)
+	cp := C.GoString(certPath)
+
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok { return errSession }
+
+	s.mu.Lock()
+	s.caCert = cp
+	s.mu.Unlock()
+	return errOK
 }
 
 //export tg_request
@@ -576,6 +645,10 @@ func tg_response_free(r *C.TgResponse) {
 // ─── Internal ─────────────────────────────────────────────
 
 func apiRequest(sessionID *C.char, method string, requestURL *C.char, body, headers *string) *C.TgResponse {
+	return apiRequestWithType(sessionID, method, requestURL, body, headers, nil)
+}
+
+func apiRequestWithType(sessionID *C.char, method string, requestURL *C.char, body, headers, contentTypeOverride *string) *C.TgResponse {
 	id := C.GoString(sessionID)
 
 	apiSessionsMu.RLock()
@@ -637,14 +710,17 @@ func apiRequest(sessionID *C.char, method string, requestURL *C.char, body, head
 	}
 
 	if headers != nil {
-		for _, line := range strings.Split(*headers, "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" { continue }
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				req.Header.Set(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
-			}
+	for _, line := range strings.Split(*headers, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" { continue }
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			req.Header.Set(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
 		}
+	}
+	}
+	if contentTypeOverride != nil && *contentTypeOverride != "" {
+	req.Header.Set("Content-Type", *contentTypeOverride)
 	}
 
 	resp, err := client.Do(req)

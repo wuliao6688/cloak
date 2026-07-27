@@ -1,6 +1,13 @@
 # Changelog
 
-## v1.5.0 — kurl-client 借鉴合入
+## v1.6.0 — kurl-client 借鉴合入 (完成)
+
+### 新增 (5~7)
+- **H2 深度随机化**：`tg_session_set_h2_randomize(s, 1)` — 随机化 TLS 扩展顺序（Chaos 模式自动启用）
+- **Multipart 文件上传**：`tg_post_multipart(s, url, filePath, fieldName)` — multipart/form-data
+- **自定义 CA 证书**：`tg_session_set_ca_cert(s, path)` — PEM 格式 / MITM 调试
+
+### kurl-client 7 项全部合入
 
 ### 新增
 - **Chaos 模式**：`ROTATE_CHAOS=6` — 每请求从 Chrome/Firefox/Safari/Opera/Brave/OkHttp 中随机选画像

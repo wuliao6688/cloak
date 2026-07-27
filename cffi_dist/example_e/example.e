@@ -47,6 +47,14 @@
     .参数 sessionID, 文本型
     .参数 enable, 整数型
 
+.DLL命令 tg_session_set_h2_randomize, 整数型, "libtlsgateway.so", "tg_session_set_h2_randomize"
+    .参数 sessionID, 文本型
+    .参数 enable, 整数型
+
+.DLL命令 tg_session_set_ca_cert, 整数型, "libtlsgateway.so", "tg_session_set_ca_cert"
+    .参数 sessionID, 文本型
+    .参数 certPath, 文本型
+
 ' === Proxy ===
 .DLL命令 tg_session_set_proxy, 整数型, "libtlsgateway.so", "tg_session_set_proxy"
     .参数 sessionID, 文本型
@@ -82,6 +90,12 @@
     .参数 url, 文本型
     .参数 data, 整数型
     .参数 dataLen, 整数型
+
+.DLL命令 tg_post_multipart, 整数型, "libtlsgateway.so", "tg_post_multipart"
+    .参数 sessionID, 文本型
+    .参数 url, 文本型
+    .参数 filePath, 文本型
+    .参数 fieldName, 文本型
 
 .DLL命令 tg_request, 整数型, "libtlsgateway.so", "tg_request"
     .参数 sessionID, 文本型

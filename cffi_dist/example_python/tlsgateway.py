@@ -68,7 +68,10 @@ _lib.tg_session_get_cookies.argtypes = [ctypes.c_char_p]*2; _lib.tg_session_get_
 _lib.tg_session_set_cookies.argtypes = [ctypes.c_char_p]*3; _lib.tg_session_set_cookies.restype = ctypes.c_int
 _lib.tg_session_clear_cookies.argtypes = [ctypes.c_char_p]; _lib.tg_session_clear_cookies.restype = ctypes.c_int
 _lib.tg_session_set_cookie_store.argtypes = [ctypes.c_char_p, ctypes.c_int]; _lib.tg_session_set_cookie_store.restype = ctypes.c_int
+_lib.tg_session_set_h2_randomize.argtypes = [ctypes.c_char_p, ctypes.c_int]; _lib.tg_session_set_h2_randomize.restype = ctypes.c_int
+_lib.tg_session_set_ca_cert.argtypes = [ctypes.c_char_p]*2; _lib.tg_session_set_ca_cert.restype = ctypes.c_int
 _lib.tg_post_bin.argtypes = [ctypes.c_char_p]*2 + [ctypes.c_void_p, ctypes.c_int]; _lib.tg_post_bin.restype = ctypes.POINTER(TgResponse)
+_lib.tg_post_multipart.argtypes = [ctypes.c_char_p]*4; _lib.tg_post_multipart.restype = ctypes.POINTER(TgResponse)
 _lib.tg_get.argtypes = [ctypes.c_char_p]*2; _lib.tg_get.restype = ctypes.POINTER(TgResponse)
 _lib.tg_post.argtypes = [ctypes.c_char_p]*3; _lib.tg_post.restype = ctypes.POINTER(TgResponse)
 _lib.tg_request.argtypes = [ctypes.c_char_p]*5; _lib.tg_request.restype = ctypes.POINTER(TgResponse)
@@ -139,6 +142,10 @@ class Session:
     def clear_cookies(self): _lib.tg_session_clear_cookies(self._b)
     def set_cookie_store(self, enable=True):
         c = _lib.tg_session_set_cookie_store(self._b, 1 if enable else 0); assert not c, "set_cookie_store"
+    def set_h2_randomize(self, enable=True):
+        c = _lib.tg_session_set_h2_randomize(self._b, 1 if enable else 0); assert not c, "set_h2_randomize"
+    def set_ca_cert(self, path):
+        c = _lib.tg_session_set_ca_cert(self._b, path.encode()); assert not c, "set_ca_cert"
 
     # ─── Requests ─────────────────────────────────────
     def _r(self, p):
@@ -158,6 +165,8 @@ class Session:
     def post(self, url, body=None): return self._r(_lib.tg_post(self._b, url.encode(), body.encode() if body else None))
     def post_bin(self, url, data: bytes):
         return self._r(_lib.tg_post_bin(self._b, url.encode(), data, len(data) if data else 0))
+    def post_multipart(self, url, file_path, field_name="file"):
+        return self._r(_lib.tg_post_multipart(self._b, url.encode(), file_path.encode(), field_name.encode()))
     def request(self, method, url, headers=None, body=None):
         return self._r(_lib.tg_request(self._b, method.encode(), url.encode(),
                                         headers.encode() if headers else None,
