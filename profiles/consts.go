@@ -3,6 +3,8 @@
 // These IDs are stable and safe for use in C shared libraries and FFI.
 package profiles
 
+import "math/rand/v2"
+
 // ProfileID is a C-compatible integer identifier for a TLS fingerprint profile.
 type ProfileID int
 
@@ -78,7 +80,16 @@ const (
 	RotateGroupSafari  RotateGroup = 3  // Safari iOS 15-18
 	RotateGroupMobile  RotateGroup = 4  // OkHttp, mobile clients
 	RotateGroupAll     RotateGroup = 5  // All verified profiles
+	RotateGroupChaos   RotateGroup = 6  // Random from All + force-tls-refresh (anti-detection max)
 )
+
+// ChaosProfile returns a random profile from the All pool.
+// Uses math/rand; caller should seed.
+func ChaosProfile() ProfileID {
+	pool := rotatePools[RotateGroupAll]
+	idx := rand.IntN(len(pool))
+	return pool[idx]
+}
 
 // rotatePools maps each RotateGroup to a pool of profile IDs for rotation.
 var rotatePools = map[RotateGroup][]ProfileID{

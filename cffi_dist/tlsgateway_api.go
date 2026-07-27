@@ -105,6 +105,37 @@ func (s *apiSession) rebuild() error {
 
 // ─── Core API ─────────────────────────────────────────────
 
+//export tg_session_create_int
+func tg_session_create_int(profileID C.int, timeoutSeconds C.int, proxyURL *C.char) C.int {
+	result := tg_session_create(profileID, timeoutSeconds, proxyURL)
+	if result == nil {
+		return -1
+	}
+	sid := C.GoString(result)
+	if strings.HasPrefix(sid, "ERR:") {
+		return -1
+	}
+	// Store int→string mapping
+	intMu.Lock()
+	intSessions[intNext] = sid
+	h := intNext
+	intNext++
+	intMu.Unlock()
+	return C.int(h)
+}
+
+var (
+	intSessions = make(map[int]string)
+	intNext     = 1
+	intMu       sync.Mutex
+)
+
+func intToSessionID(handle C.int) string {
+	intMu.Lock()
+	defer intMu.Unlock()
+	return intSessions[int(handle)]
+}
+
 //export tg_session_create
 func tg_session_create(profileID C.int, timeoutSeconds C.int, proxyURL *C.char) *C.char {
 	id := uuid.New().String()
@@ -394,6 +425,26 @@ func tg_session_clear_cookies(sessionID *C.char) C.int {
 	return errOK
 }
 
+//export tg_session_set_cookie_store
+func tg_session_set_cookie_store(sessionID *C.char, enable C.int) C.int {
+	id := C.GoString(sessionID)
+	apiSessionsMu.RLock()
+	s, ok := apiSessions[id]
+	apiSessionsMu.RUnlock()
+	if !ok {
+		return errSession
+	}
+	s.mu.Lock()
+	if enable == 0 {
+		s.client.SetCookieJar(nil)
+	} else {
+		jar := tls_client.NewCookieJar()
+		s.client.SetCookieJar(jar)
+	}
+	s.mu.Unlock()
+	return errOK
+}
+
 // ─── Requests ─────────────────────────────────────────────
 
 //export tg_get
@@ -409,6 +460,15 @@ func tg_post(sessionID *C.char, requestURL *C.char, body *C.char) *C.TgResponse 
 		b = &s
 	}
 	return apiRequest(sessionID, "POST", requestURL, b, nil)
+}
+
+//export tg_post_bin
+func tg_post_bin(sessionID *C.char, requestURL *C.char, data unsafe.Pointer, dataLen C.int) *C.TgResponse {
+	var bodyStr string
+	if data != nil && dataLen > 0 {
+		bodyStr = string(C.GoBytes(data, dataLen))
+	}
+	return apiRequest(sessionID, "POST", requestURL, &bodyStr, nil)
 }
 
 //export tg_request
@@ -529,8 +589,11 @@ func apiRequest(sessionID *C.char, method string, requestURL *C.char, body, head
 	s.mu.Lock()
 	s.reqCount++
 
-	// Profile rotation
-	if s.rotateGroup > 0 && s.rotateEvery > 0 && s.reqCount%s.rotateEvery == 0 {
+	// Profile rotation (Chaos mode: random profile every request + force TLS refresh)
+	if s.rotateGroup == 6 {
+		s.profileID = int(profiles.ChaosProfile())
+		s.rebuild()
+	} else if s.rotateGroup > 0 && s.rotateEvery > 0 && s.reqCount%s.rotateEvery == 0 {
 		nextPID, err := profiles.NextRotateProfile(profiles.RotateGroup(s.rotateGroup), s.reqCount)
 		if err == nil {
 			s.profileID = int(nextPID)
@@ -539,7 +602,8 @@ func apiRequest(sessionID *C.char, method string, requestURL *C.char, body, head
 	}
 
 	// TLS context refresh (new ClientHello, new session ticket)
-	if s.tlsRefresh > 0 && s.reqCount%s.tlsRefresh == 0 {
+	// Chaos: always refresh; normal: periodic
+	if s.rotateGroup == 6 || (s.tlsRefresh > 0 && s.reqCount%s.tlsRefresh == 0) {
 		s.rebuild()
 	}
 

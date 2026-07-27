@@ -32,7 +32,7 @@ PROFILE_SAFARI_IOS_16_0, PROFILE_SAFARI_15_6_1, PROFILE_SAFARI_IPAD_15_6 = 22, 2
 PROFILE_OPERA_91, PROFILE_BRAVE_146 = 30, 31
 PROFILE_OKHTTP4_ANDROID_13, PROFILE_EDGE_120 = 40, 50
 
-ROTATE_CHROME, ROTATE_FIREFOX, ROTATE_SAFARI, ROTATE_MOBILE, ROTATE_ALL = 1, 2, 3, 4, 5
+ROTATE_CHROME, ROTATE_FIREFOX, ROTATE_SAFARI, ROTATE_MOBILE, ROTATE_ALL, ROTATE_CHAOS = 1, 2, 3, 4, 5, 6
 
 ERR_OK, ERR_NETWORK, ERR_HTTP, ERR_SESSION, ERR_TIMEOUT, ERR_PROFILE = 0, 1, 2, 3, 4, 5
 
@@ -67,6 +67,8 @@ _lib.tg_session_get_profile.argtypes = [ctypes.c_char_p]; _lib.tg_session_get_pr
 _lib.tg_session_get_cookies.argtypes = [ctypes.c_char_p]*2; _lib.tg_session_get_cookies.restype = ctypes.c_char_p
 _lib.tg_session_set_cookies.argtypes = [ctypes.c_char_p]*3; _lib.tg_session_set_cookies.restype = ctypes.c_int
 _lib.tg_session_clear_cookies.argtypes = [ctypes.c_char_p]; _lib.tg_session_clear_cookies.restype = ctypes.c_int
+_lib.tg_session_set_cookie_store.argtypes = [ctypes.c_char_p, ctypes.c_int]; _lib.tg_session_set_cookie_store.restype = ctypes.c_int
+_lib.tg_post_bin.argtypes = [ctypes.c_char_p]*2 + [ctypes.c_void_p, ctypes.c_int]; _lib.tg_post_bin.restype = ctypes.POINTER(TgResponse)
 _lib.tg_get.argtypes = [ctypes.c_char_p]*2; _lib.tg_get.restype = ctypes.POINTER(TgResponse)
 _lib.tg_post.argtypes = [ctypes.c_char_p]*3; _lib.tg_post.restype = ctypes.POINTER(TgResponse)
 _lib.tg_request.argtypes = [ctypes.c_char_p]*5; _lib.tg_request.restype = ctypes.POINTER(TgResponse)
@@ -135,6 +137,8 @@ class Session:
     def get_cookies(self, url): r = _lib.tg_session_get_cookies(self._b, url.encode()); return r.decode() if r else ""
     def set_cookies(self, url, ck): _lib.tg_session_set_cookies(self._b, url.encode(), ck.encode())
     def clear_cookies(self): _lib.tg_session_clear_cookies(self._b)
+    def set_cookie_store(self, enable=True):
+        c = _lib.tg_session_set_cookie_store(self._b, 1 if enable else 0); assert not c, "set_cookie_store"
 
     # ─── Requests ─────────────────────────────────────
     def _r(self, p):
@@ -152,6 +156,8 @@ class Session:
 
     def get(self, url): return self._r(_lib.tg_get(self._b, url.encode()))
     def post(self, url, body=None): return self._r(_lib.tg_post(self._b, url.encode(), body.encode() if body else None))
+    def post_bin(self, url, data: bytes):
+        return self._r(_lib.tg_post_bin(self._b, url.encode(), data, len(data) if data else 0))
     def request(self, method, url, headers=None, body=None):
         return self._r(_lib.tg_request(self._b, method.encode(), url.encode(),
                                         headers.encode() if headers else None,

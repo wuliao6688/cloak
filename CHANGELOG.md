@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.5.0 — kurl-client 借鉴合入
+
+### 新增
+- **Chaos 模式**：`ROTATE_CHAOS=6` — 每请求从 Chrome/Firefox/Safari/Opera/Brave/OkHttp 中随机选画像
+  - 每请求自动重建 TLS Client（新 ClientHello + Session Ticket + 新扩展顺序）
+  - 等同于 kurl-client 的 `set_impersonate("chaos")` 效果
+- **二进制 POST**：`tg_post_bin(session, url, data_ptr, dataLen)` — 支持 protobuf/图片/文件
+- **整数 Handle**：`tg_session_create_int(profile, timeout, proxy) → int` — 易语言判等只需 `=`
+- **Cookie 开关**：`tg_session_set_cookie_store(session, enable)` — 请求级禁用 Cookie jar
+
+### 更新
+- `profiles/consts.go`：`RotateGroupChaos` + `ChaosProfile()` 随机选择
+- C 头：27 个 DLL 导出函数声明
+- Python：`post_bin()` / `set_cookie_store()` / `ROTATE_CHAOS`
+- 易语言：`tg_post_bin` / `tg_session_set_cookie_store` / 场景九 Chaos
+
 ## v1.4.1 — 代理管理
 
 ### 新增

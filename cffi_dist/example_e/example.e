@@ -43,6 +43,10 @@
 .DLL命令 tg_session_clear_cookies, 整数型, "libtlsgateway.so", "tg_session_clear_cookies"
     .参数 sessionID, 文本型
 
+.DLL命令 tg_session_set_cookie_store, 整数型, "libtlsgateway.so", "tg_session_set_cookie_store"
+    .参数 sessionID, 文本型
+    .参数 enable, 整数型
+
 ' === Proxy ===
 .DLL命令 tg_session_set_proxy, 整数型, "libtlsgateway.so", "tg_session_set_proxy"
     .参数 sessionID, 文本型
@@ -72,6 +76,12 @@
     .参数 sessionID, 文本型
     .参数 url, 文本型
     .参数 body, 文本型
+
+.DLL命令 tg_post_bin, 整数型, "libtlsgateway.so", "tg_post_bin"
+    .参数 sessionID, 文本型
+    .参数 url, 文本型
+    .参数 data, 整数型
+    .参数 dataLen, 整数型
 
 .DLL命令 tg_request, 整数型, "libtlsgateway.so", "tg_request"
     .参数 sessionID, 文本型
@@ -141,6 +151,7 @@
 .常量 ROTATE_SAFARI, 3
 .常量 ROTATE_MOBILE, 4
 .常量 ROTATE_ALL, 5
+.常量 ROTATE_CHAOS, 6
 
 ' ═══════════════════════════════════════════════════════════
 ' 场景一：最简单的 GET 请求
@@ -341,5 +352,25 @@
     
     ' 清除
     tg_session_set_proxy(session, "")
+    
+    tg_session_free(session)
+
+' ═══════════════════════════════════════════════════════════
+' 场景九：Chaos 模式 — 每请求随机画像（最强防检测）
+' ═══════════════════════════════════════════════════════════
+
+.子程序 场景9_Chaos模式
+    .局部变量 session, 文本型
+    .局部变量 resp, 整数型
+    .局部变量 i, 整数型
+    
+    session = tg_session_create(PROFILE_CHROME_150, 30, "")
+    tg_session_set_rotate(session, ROTATE_CHAOS, 0, 0)
+    
+    .计次循环首 (10, i)
+        resp = tg_get(session, "https://httpbin.org/ip")
+        调试输出("请求 #" + 到文本(i) + " 画像=" + 到文本(tg_session_get_profile(session)) + " 状态=" + 到文本(tg_response_status(resp)))
+        tg_response_free(resp)
+    .计次循环尾 ()
     
     tg_session_free(session)
