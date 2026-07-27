@@ -18,10 +18,7 @@ func TestClient_HeaderOrder(t *testing.T) {
 		tls_client.WithClientProfile(profiles.Chrome_105),
 	}
 
-	client, err := tls_client.NewHttpClient(nil, options...)
-	if err != nil {
-		t.Fatal(err)
-	}
+	client := newFingerprintTestClient(t, options...)
 
 	req, err := http.NewRequest(http.MethodGet, peetApiEndpoint, nil)
 	if err != nil {
@@ -106,10 +103,7 @@ func TestClient_HeaderOrderHttp1(t *testing.T) {
 		tls_client.WithForceHttp1(),
 	}
 
-	client, err := tls_client.NewHttpClient(nil, options...)
-	if err != nil {
-		t.Fatal(err)
-	}
+	client := newFingerprintTestClient(t, options...)
 
 	req, err := http.NewRequest(http.MethodGet, peetApiEndpoint, nil)
 	if err != nil {
@@ -194,10 +188,7 @@ func TestClient_HeaderOrderWithContentLengthHttp1(t *testing.T) {
 		tls_client.WithForceHttp1(),
 	}
 
-	client, err := tls_client.NewHttpClient(nil, options...)
-	if err != nil {
-		t.Fatal(err)
-	}
+	client := newFingerprintTestClient(t, options...)
 
 	req, err := http.NewRequest(http.MethodPost, peetApiEndpoint, strings.NewReader("foobar"))
 	if err != nil {
@@ -247,10 +238,7 @@ func TestClient_HeaderOrderWithContentLength(t *testing.T) {
 		tls_client.WithClientProfile(profiles.Chrome_105),
 	}
 
-	client, err := tls_client.NewHttpClient(nil, options...)
-	if err != nil {
-		t.Fatal(err)
-	}
+	client := newFingerprintTestClient(t, options...)
 
 	req, err := http.NewRequest(http.MethodPost, peetApiEndpoint, strings.NewReader("foobar"))
 	if err != nil {

@@ -2,15 +2,15 @@ package tests
 
 import (
 	"encoding/json"
-	"fmt"
-	"github.com/bogdanfinn/tls-client/profiles"
 	"io"
 	"strings"
 	"testing"
 
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
+	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClient_RandomExtensionOrderChrome(t *testing.T) {
@@ -19,10 +19,7 @@ func TestClient_RandomExtensionOrderChrome(t *testing.T) {
 		tls_client.WithRandomTLSExtensionOrder(),
 	}
 
-	client, err := tls_client.NewHttpClient(nil, options...)
-	if err != nil {
-		t.Fatal(err)
-	}
+	client := newFingerprintTestClient(t, options...)
 
 	req, err := http.NewRequest(http.MethodGet, peetApiEndpoint, nil)
 	if err != nil {
@@ -51,14 +48,10 @@ func TestClient_RandomExtensionOrderChrome(t *testing.T) {
 
 	ja3String := tlsApiResponse.TLS.Ja3
 	ja3StringParts := strings.Split(ja3String, ",")
+	require.Len(t, ja3StringParts, 5, "invalid JA3 string: %q", ja3String)
 
-	returnedExtensions := ja3StringParts[2]
-
-	for _, extension := range extensions {
-		assert.Contains(t, returnedExtensions, extension, fmt.Sprintf("extension %s is not part of %s", extension, returnedExtensions))
-	}
-
-	returnedExtensionParts := strings.Split(returnedExtensions, "-")
+	returnedExtensionParts := strings.Split(ja3StringParts[2], "-")
+	assert.ElementsMatch(t, extensions, returnedExtensionParts)
 
 	assert.Equal(t, "21", returnedExtensionParts[len(returnedExtensionParts)-1])
 }
@@ -69,10 +62,7 @@ func TestClient_RandomExtensionOrderCustom(t *testing.T) {
 		tls_client.WithRandomTLSExtensionOrder(),
 	}
 
-	client, err := tls_client.NewHttpClient(nil, options...)
-	if err != nil {
-		t.Fatal(err)
-	}
+	client := newFingerprintTestClient(t, options...)
 
 	req, err := http.NewRequest(http.MethodGet, peetApiEndpoint, nil)
 	if err != nil {
@@ -101,10 +91,8 @@ func TestClient_RandomExtensionOrderCustom(t *testing.T) {
 
 	ja3String := tlsApiResponse.TLS.Ja3
 	ja3StringParts := strings.Split(ja3String, ",")
+	require.Len(t, ja3StringParts, 5, "invalid JA3 string: %q", ja3String)
 
-	returnedExtensions := ja3StringParts[2]
-
-	for _, extension := range extensions {
-		assert.Contains(t, returnedExtensions, extension, fmt.Sprintf("extension %s is not part of %s", extension, returnedExtensions))
-	}
+	returnedExtensionParts := strings.Split(ja3StringParts[2], "-")
+	assert.ElementsMatch(t, extensions, returnedExtensionParts)
 }
