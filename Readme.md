@@ -81,7 +81,41 @@ resp, _ := client.Get("https://example.com")
 | HTTP/3 | ❌ | ❌ | ✅ |
 | Protocol Racing | ❌ | ❌ | ✅ |
 | 跨语言 | ❌ (Go only) | ✅ HTTP_PROXY | ✅ C shared library |
-| 画像热加载 | ✅ | ✅ | ✅ |
+
+## 🚀 DLL 商业集成（30 个导出，零 JSON）
+
+面向 **易语言/C/C++/Python** 的商用 DLL。30 个导出函数，零 JSON，Session 模型。
+
+```c
+#include "tlsgateway_api.h"
+
+// 创建 Chrome 150 会话
+char* s = tg_session_create(TLS_PROFILE_CHROME_150, 30, "");
+
+// Chaos 防检测（每请求自动切换随机浏览器指纹）
+tg_session_set_rotate(s, 6, 0, 0);
+
+// 代理池轮换
+tg_session_set_proxy_list(s, "http://ip1:8080\nhttp://ip2:8080", 3);
+
+// 登录流程
+tg_session_set_cookies(s, "https://site.com", "session=abc");
+TgResponse* r = tg_get(s, "https://site.com/dashboard");
+printf("status=%d body=%s", tg_response_status(r), tg_response_body(r));
+tg_response_free(r);
+tg_session_free(s);
+```
+
+| 类别 | 函数 | 易语言示例 |
+|------|------|-----------|
+| Session | `tg_session_create/create_int/free` | `.DLL命令 tg_session_create, 文本型, "libtlsgateway.so", "tg_session_create"` |
+| 防检测 | `tg_session_set_rotate` (Chaos/Chrome/Firefox/...) | `tg_session_set_rotate(s, #ROTATE_CHAOS, 0, 0)` |
+| 代理 | `set_proxy/get_proxy/set_proxy_list` | HTTP/SOCKS5/认证/池轮换 |
+| Cookie | `get_cookies/set_cookies/clear_cookies/set_cookie_store` | 登录流程一条龙 |
+| 请求 | `tg_get/post/post_bin/post_multipart/request` | 二进制/文件上传 |
+| 响应 | `tg_response_status/body/body_len/headers/header/error/code/free` | 完整响应读取 |
+
+> 依赖：`libtlsgateway.so` | 构建：`cd cffi_dist && go build -buildmode=c-shared -o libtlsgateway.so .` | 测试：10 分钟 50 线程 0 崩溃
 
 ## 客户端画像
 
@@ -124,7 +158,13 @@ for range watcher.Updates() {
 ├─ client.go             完整 tls-client（Fork 版本）
 ├─ roundtripper.go       TLS 握手与 Transport 缓存
 ├─ racer.go              HTTP/3 Protocol Racing
-├─ cffi_src/             C shared library 支持
+├─ cffi_src/             C shared library 内部 session 管理
+├─ cffi_dist/            DLL 导出层 (30 函数)
+│  ├─ tlsgateway_api.go  30 个 DLL 导出 + 所有业务逻辑
+│  ├─ tlsgateway_api.h   C 头文件（手动维护）
+│  ├─ example_python/     Python SDK (Session 类)
+│  ├─ example_e/          易语言 9 场景示例
+│  └─ go.mod              replace => ../ (始终构建本地代码)
 ├─ stress_test.go        高并发压力测试
 ├─ tests/                在线集成测试（integration tag）
 └─ profiles.json         导出的 81 个画像 JSON

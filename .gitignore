@@ -8,9 +8,10 @@
 *.out
 coverage.*
 
-# CFFI build artifacts
+# CFFI build artifacts (keep .h — they're manually maintained API docs)
 cffi_dist/dist/
+cffi_dist/tls_client_cffi
 *.dll
 *.dylib
 *.so
-*.h
+fingerprint_verification_report.json
