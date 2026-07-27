@@ -1,65 +1,47 @@
-# tls-client（增强维护版）
+# tls-client
 
-`tls-client` 是一个基于 Go 的可定制 HTTP 客户端。它不仅能修改 `User-Agent`，还可以控制 TLS ClientHello、HTTP/2 设置与帧顺序、HTTP/3 参数、请求头顺序等协议细节，用于尽可能复现真实浏览器或移动客户端的网络指纹。
+面向 Go 与多语言调用场景的 TLS 指纹 HTTP 客户端。
 
-本仓库基于上游项目 [bogdanfinn/tls-client](https://github.com/bogdanfinn/tls-client)，继续使用 Go、[`fhttp`](https://github.com/bogdanfinn/fhttp) 和定制版 [`uTLS`](https://github.com/bogdanfinn/utls) 技术栈。在保持上游 API 与画像兼容性的基础上，本地增强重点放在：
+[![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go)](https://go.dev/)
+[![CI](https://github.com/wuliao6688/tls-client/actions/workflows/ci.yml/badge.svg)](https://github.com/wuliao6688/tls-client/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-BSD--style-blue.svg)](./LICENSE)
 
-- 画像解析、元数据与能力边界；
-- 并发安全和动态配置隔离；
-- HTTP/2 与 HTTP/3 协议竞速的请求安全；
-- CFFI session 生命周期和并行模型；
-- 可持续跟进上游的测试与合并规范。
+`tls-client` 可以控制 TLS ClientHello、HTTP/2 设置与帧顺序、HTTP/3 参数、Header 顺序等协议细节，用于复现浏览器或移动客户端在网络协议层的行为。项目同时提供 Go API、WebSocket 支持和 C shared library，适合需要稳定连接复用、动态代理、画像治理及多语言集成的应用。
 
-本仓库借鉴了 [kurl-client](https://gitee.com/hqs666/kurl-client) 在画像治理、session 隔离和并发设计方面的思路，但没有移植其 Rust/BoringSSL 实现。
+本仓库由 [wuliao6688](https://github.com/wuliao6688) 独立维护，拥有自己的功能基线、测试矩阵和维护规范。项目源自 [bogdanfinn/tls-client](https://github.com/bogdanfinn/tls-client)，并持续吸收其协议与画像更新；当前仍保留原 Go module 路径，以维持源码和 API 兼容性。两者的发布内容不应视为完全相同。
 
-## 主要能力
+> TLS/HTTP 指纹只覆盖网络协议层，不等同于完整浏览器环境，也不能单独绕过所有自动化检测。
+
+## 核心能力
 
 | 分类 | 能力 |
 | --- | --- |
-| 协议 | HTTP/1.1、HTTP/2、HTTP/3，支持 ALPN 协商与按 host 缓存 Transport |
-| TLS 指纹 | Chrome、Firefox、Safari、Brave、Opera、OkHttp 以及部分定制客户端画像 |
-| HTTP 指纹 | HTTP/2 SETTINGS、优先级帧、伪头顺序、连接窗口；HTTP/3 SETTINGS、GREASE 与优先级参数 |
-| 请求控制 | 普通 Header、默认 Header 合并、Header 顺序、Cookie Jar、重定向策略、超时 |
-| 网络 | HTTP/HTTPS、SOCKS4、SOCKS5 代理，自定义 Dialer，本地地址与 IPv4/IPv6 限制 |
-| 安全与观测 | 证书 Pinning、TLS Key Log、带宽统计、调试日志、请求前/响应后 Hook |
-| 长连接 | WebSocket 使用与 HTTP 客户端一致的 TLS 指纹和 Dialer |
-| FFI | C shared library，以及仓库内的 Python、Node.js、TypeScript、C# 示例 |
-| 稳定性增强 | 防御性配置复制、动态客户端指针切换、按目标单飞初始化、请求体和响应体所有权治理 |
-
-> TLS/HTTP 指纹只是网络协议层特征，不等于完整的浏览器环境，也不能单独解决所有反自动化检测。
+| 网络协议 | HTTP/1.1、HTTP/2、HTTP/3、ALPN、QUIC |
+| 客户端画像 | Chrome、Firefox、Safari、Brave、Opera、OkHttp 及部分定制客户端 |
+| 指纹控制 | TLS ClientHello、HTTP/2 SETTINGS、优先级帧、伪头顺序、HTTP/3 SETTINGS、GREASE |
+| 请求能力 | Header 合并与排序、Cookie Jar、重定向、超时、压缩、请求/响应 Hook |
+| 连接能力 | HTTP/HTTPS、SOCKS4、SOCKS5 代理，自定义 Dialer，本地地址和 IP 版本限制 |
+| 安全与观测 | 证书 Pinning、TLS Key Log、带宽统计、受限 Body 调试日志 |
+| 并发与缓存 | 请求状态快照、按目标单飞初始化、Transport LRU、TLS session 缓存 |
+| 多语言集成 | C shared library，以及 Python、Node.js、TypeScript、C# 示例 |
 
 ## 环境要求
 
-- Go **1.26.5**，以根目录 [`.tool-versions`](./.tool-versions) 和 [`go.mod`](./go.mod) 为准；
-- HTTP/3 需要目标服务和网络环境支持 UDP/QUIC；
-- 构建 `c-shared`、部分平台的 `-race` 或跨平台 CFFI 时，需要可用的 C 编译器；
-- 画像在线集成测试会访问外部指纹服务，默认测试流程不会运行它们。
+- Go 1.26.5，以 [`go.mod`](./go.mod) 和 [`.tool-versions`](./.tool-versions) 为准；
+- HTTP/3 需要目标服务与本地网络支持 UDP/QUIC；
+- 构建 C shared library、启用部分平台的 race detector 或执行跨平台构建时，需要 C 编译器。
 
-## 获取与依赖方式
+## 安装
 
-### 开发当前仓库
-
-```bash
-git clone <你的仓库地址> tls-client
-cd tls-client
-go mod download
-```
-
-### 在另一个本地 Go 项目中使用当前工作树
-
-模块路径仍保持为 `github.com/bogdanfinn/tls-client`。在本地增强版尚未发布到你自己的远程仓库前，可以在调用方 `go.mod` 中使用：
+为了兼容现有生态，本仓库的 module 路径仍是 `github.com/bogdanfinn/tls-client`。在另一个本地项目中使用本仓库时，可通过 `replace` 指向检出的源码：
 
 ```go
-require github.com/bogdanfinn/tls-client v1.15.1
+require github.com/bogdanfinn/tls-client v0.0.0
 
 replace github.com/bogdanfinn/tls-client => ../tls-client
 ```
 
-直接执行以下命令获取的是上游已发布版本，不一定包含本仓库尚未发布的增强：
-
-```bash
-go get github.com/bogdanfinn/tls-client
-```
+直接执行 `go get github.com/bogdanfinn/tls-client` 获取的是原项目发布版本，不一定包含本仓库的功能和修复。若未来迁移到独立 module 路径，将作为明确的兼容性变更发布。
 
 ## 快速开始
 
@@ -101,7 +83,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// 请求自身的字段优先于 WithDefaultHeaders 中的同名字段。
+	// 请求自身的同名字段优先于默认 Header。
 	req.Header.Set("Accept", "text/html")
 	req.Header[http.HeaderOrderKey] = []string{
 		"accept",
@@ -118,96 +100,73 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("status=%d body=%s", resp.StatusCode, body)
+	log.Printf("status=%d bytes=%d", resp.StatusCode, len(body))
 }
 ```
 
 ## 客户端画像
 
-### 固定画像
+### 选择画像
 
-画像注册表位于 [`profiles/profiles.go`](./profiles/profiles.go)。建议通过解析 API 获取画像，而不是在业务层直接遍历或修改 `MappedTLSClients`。
+推荐使用严格解析 API，让无效标识符尽早返回错误：
 
 ```go
-profile := profiles.ResolveClientProfile("chrome_146")
+profile, err := profiles.ResolveClientProfileStrict("chrome_146")
 ```
 
-### 严格解析与兼容解析
-
-| API | 未知标识符行为 |
+| API | 未知标识符的处理方式 |
 | --- | --- |
-| `ResolveClientProfile` | 为兼容旧调用方，回退到 `DefaultClientProfile` |
-| `ResolveClientProfileWithKey` | 回退默认画像，并返回空 key |
+| `ResolveClientProfile` | 回退到 `DefaultClientProfile`，兼容旧调用方 |
+| `ResolveClientProfileWithKey` | 回退到默认画像并返回空 key |
 | `ResolveClientProfileStrict` | 返回 `ErrUnknownClientProfile` |
 | `ResolveClientProfileWithKeyStrict` | 返回规范 key、画像或明确错误 |
 
-严格解析会忽略标识符首尾空白，并进行大小写不敏感匹配。CFFI 默认使用严格解析，避免拼写错误静默变成默认画像。
+严格解析忽略首尾空白且大小写不敏感。CFFI 默认采用严格解析，避免拼写错误静默变成默认画像。
 
-### `random` 与 `chaos`
+### 随机画像
+
+`random` 和 `chaos` 会从已经注册并经过筛选的真实画像中随机选择，而不是随机拼接 TLS 参数：
 
 ```go
 key, profile := profiles.ResolveClientProfileWithKey("random")
-_ = key
-_ = profile
 ```
 
-`random` 和 `chaos` 当前都表示从可信候选集合中随机选择一个已注册画像。候选集合会排除：
+随机候选会排除：
 
-- Zalando、Nike、Mesh、MMS 等业务定制画像；
+- Zalando、Nike、Cloudscraper、MMS、Mesh、Confirmed 等业务定制画像；
 - `_PSK`、`_PSK_PQ` 等显式会话恢复画像；
-- 元数据中声明了 `KnownGaps` 的画像。
+- 元数据中 `KnownGaps` 非空的画像。
 
-随机选择的是已有真实画像，而不是随机拼接 TLS 参数，避免生成现实中不存在的组合指纹。
+可使用 `GetProfileMetadata`、`AllProfileMetadata`、`ProfilesWithKnownGaps` 和 `RandomBrowserProfileKeys` 查询画像信息。画像及元数据 Getter 返回防御性副本，调用方修改返回值不会污染全局注册表。
 
-### 画像元数据
+## 常用配置
 
-```go
-metadata, ok := profiles.GetProfileMetadata("chrome_150")
-if ok {
-	log.Println(metadata.TLSBase)
-	log.Println(metadata.KnownGaps)
-	log.Println(metadata.VerifiedAgainst)
-}
-```
-
-相关 API：
-
-- `GetProfileMetadata`：查询单个画像；
-- `AllProfileMetadata`：返回元数据注册表的防御性副本；
-- `ProfilesWithKnownGaps`：列出仍有已知差异的画像；
-- `RandomBrowserProfileKeys`：列出随机选择候选项。
-
-`ClientProfile` 的 map、slice、优先级指针以及 `ClientHelloID` 的 seed/weights 指针 Getter 均返回副本，调用方修改返回值不会污染全局画像。
-
-## 常用客户端选项
-
-| 选项 | 说明 |
+| 选项 | 用途 |
 | --- | --- |
-| `WithClientProfile` | 指定 TLS、HTTP/2、HTTP/3 画像 |
-| `WithTimeoutSeconds` / `WithTimeoutMilliseconds` | 设置客户端超时，两者不能同时用于 CFFI 请求 |
+| `WithClientProfile` | 设置 TLS、HTTP/2、HTTP/3 画像 |
+| `WithTimeoutSeconds` / `WithTimeoutMilliseconds` | 设置客户端超时 |
 | `WithCookieJar` | 注入 Cookie Jar |
-| `WithProxyUrl` | 设置 HTTP/HTTPS/SOCKS4/SOCKS5 代理 |
-| `WithProxyDialerFactory` | 自定义代理 Dialer 工厂 |
-| `WithDialContext` | 完全接管 TCP Dial，使用者自行负责代理逻辑 |
-| `WithDefaultHeaders` | 按字段合并默认 Header，请求字段优先，字段名大小写不敏感 |
-| `WithConnectHeaders` | 设置 HTTP CONNECT 请求头 |
-| `WithNotFollowRedirects` / `WithCustomRedirectFunc` | 控制重定向 |
-| `WithForceHttp1` | 强制 HTTP/1.1 |
+| `WithProxyUrl` | 设置 HTTP、HTTPS、SOCKS4 或 SOCKS5 代理 |
+| `WithDialContext` | 完全接管 TCP 连接建立过程 |
+| `WithDefaultHeaders` | 按字段合并默认 Header，请求字段优先且名称大小写不敏感 |
+| `WithConnectHeaders` | 设置 HTTP CONNECT Header |
+| `WithNotFollowRedirects` / `WithCustomRedirectFunc` | 控制重定向策略 |
+| `WithForceHttp1` | 强制使用 HTTP/1.1 |
 | `WithDisableHttp3` | 禁用 HTTP/3 |
 | `WithProtocolRacing` | 启用 HTTP/3 与延迟 HTTP/2 竞速 |
-| `WithRandomTLSExtensionOrder` | 随机 TLS 扩展顺序，使用前应确认目标画像确实具有该行为 |
+| `WithRandomTLSExtensionOrder` | 随机 TLS 扩展顺序 |
 | `WithCertificatePinning` | 启用证书 Pinning |
-| `WithTransportOptions` | 配置连接池、压缩、缓冲区、Root CA、客户端证书和 Key Log |
+| `WithTransportOptions` | 配置连接池、缓存、证书、Key Log 和 Protocol Racing 参数 |
 | `WithBandwidthTracker` | 启用带宽统计 |
 | `WithPreHook` / `WithPostHook` | 注册请求前和响应后 Hook |
 | `WithCatchPanics` | 将请求处理 panic 转换为显式 error |
-| `WithDebugBodyLimit` | 限制调试日志保留的请求/响应 Body 字节数；默认 64 KiB，设为 0 可关闭 Body 预览 |
+| `WithDebugBodyLimit` | 限制调试日志中的 Body 预览大小 |
 
-Header、证书 Pin 列表和 `TransportOptions` 在客户端构建时会进行防御性复制，避免调用方后续修改输入对象造成数据竞争或隐式配置漂移。
+Header、CONNECT Header、证书 Pin 列表与 `TransportOptions` 会在客户端构建时复制，调用方后续修改原始对象不会改变已创建客户端的配置。
 
 ## HTTP/3 Protocol Racing
 
-启用方式：
+Protocol Racing 会立即尝试 HTTP/3，并在默认 300 ms 的可取消延迟后尝试 HTTP/2；默认总等待时间为 10 秒。
 
 ```go
 client, err := tls_client.NewHttpClient(nil,
@@ -216,48 +175,27 @@ client, err := tls_client.NewHttpClient(nil,
 )
 ```
 
-约束与行为：
+使用约束：
 
-- 不能与 `WithForceHttp1` 或 `WithDisableHttp3` 同时使用，否则客户端构建失败；
-- 不能与 HTTP/HTTPS/SOCKS 代理、自定义 TCP DialContext、本地地址、IPv4/IPv6 限制、证书 Pinning 或带宽统计同时使用；当前实现会拒绝这些组合，避免 QUIC 连接绕过配置；
-- HTTP/3 立即尝试，HTTP/2 在可取消的 300ms 延迟后尝试；
-- 可通过 `TransportOptions.ProtocolRacingHTTP2Delay` 和 `TransportOptions.ProtocolRacingTimeout` 调整竞速延迟与总等待时间；nil 保持 300ms/10s 默认值；
-- 只有 `GET`、`HEAD`、`OPTIONS` 会参与竞速；
-- 有请求体时必须提供 `GetBody`，确保 HTTP/2 与 HTTP/3 使用独立副本；
-- POST 等非安全请求不会进入双协议竞速，只发送一次；没有协议缓存时走 HTTP/2，已有缓存时可以复用单一已知协议；
-- 获胜协议按目标地址缓存，HTTP/3 缓存的是实际获胜 Transport；
-- 输家响应体和临时 HTTP/3 Transport 会被关闭；
-- 获胜请求的 context 会保持到响应体 EOF 或 `Close`，不会因竞速结束而提前取消。
+- 只有 `GET`、`HEAD`、`OPTIONS` 会参与双协议竞速；
+- 带 Body 的安全请求必须提供 `GetBody`，两个协议会使用互相独立的 Body 副本；
+- `POST`、`PUT`、`PATCH`、`DELETE` 等请求不会因竞速被重复发送；
+- 不能与 `WithForceHttp1`、`WithDisableHttp3` 同时启用；
+- 当前不能与代理、自定义 TCP DialContext、本地地址、IPv4/IPv6 限制、证书 Pinning 或带宽统计组合使用；
+- 可通过 `TransportOptions.ProtocolRacingHTTP2Delay` 和 `TransportOptions.ProtocolRacingTimeout` 调整时序；
+- 获胜请求的 context 会保持到响应体 EOF 或 `Close`，输家响应体和临时 Transport 会被回收。
+
+项目会缓存目标地址实际获胜的协议和 HTTP/3 Transport。缓存协议失效后，安全请求可以重新竞速。
 
 ## 并发与动态配置
 
-同一个 `HttpClient` 可以被多个 goroutine 使用。动态配置采用“构建新状态并切换指针”的方式，不复制已经投入使用的 `http.Client` 内部同步状态。
+同一个 `HttpClient` 可以由多个 goroutine 并发使用。`SetProxy`、`SetFollowRedirect` 和 `SetCookieJar` 通过切换新的客户端状态影响后续请求，已经开始的请求继续使用自己的状态快照；实现不会复制已经投入使用的 `http.Client`。
 
-- `SetProxy`：构建新 Transport、同步更新 Dialer，然后在锁外关闭旧 Transport 的空闲连接；
-- `SetProxy` 的代理/Dialer/Transport 构建不再持有客户端状态读写锁，正在执行的请求可以继续使用旧快照；
-- `SetFollowRedirect`：为后续请求切换新的客户端状态，不修改正在使用的客户端快照；
-- `SetCookieJar`：切换新 Jar，已开始的请求继续使用自己的快照；
-- Transport 初始化按目标地址单飞，TLS 握手期间不会持有全局 map 锁；
-- Transport 缓存使用 LRU 上限，默认每个 Client 最多 256 个 host/protocol 条目；缓存命中只持有共享读锁并通过原子序列更新访问时间，不会让同一热门 host 的读请求因 LRU 记账串行；可通过 `TransportOptions.MaxCachedTransports` 调整，`-1` 保留无限缓存；被驱逐的 HTTP/3 Transport 会等活动响应体 EOF/Close 后再关闭；
-- 支持恢复的画像默认保留 32 个 TLS session；可通过 `TransportOptions.TLSClientSessionCacheSize` 调整，`0` 使用默认值；
-- HTTP/2 重连握手继承当前等待该 host 的请求 context；只有所有相关请求都取消时，共享握手才会被取消；
-- Header 和画像配置对外返回或接收时尽量使用防御性副本。
-
-调试模式只记录有限 Body 预览，不会为了日志将完整请求或响应读入内存；不可重放的请求体会跳过预览。
-
-### CFFI session 并发模型
-
-- 不同 `sessionId` 可以并行构建和发送请求；
-- 同一 `sessionId` 使用 flight 租约串行执行完整请求生命周期；
-- 租约覆盖代理/重定向修改、请求发送、Cookie 更新和响应体读取，避免两个请求互相覆盖动态代理；
-- `RemoveSession` 与 `ClearSessionCache` 会等待相关 session 操作完成，再在长临界区之外关闭连接；
-- session 创建失败不会写入空客户端；
-- session 缓存默认最多保留 1024 个条目并按 LRU 回收；正在执行或等待 flight 的 session 不会被驱逐；
-- idle TTL 默认关闭，可通过 Go API `tls_client_cffi_src.ConfigureSessionCache` 或环境变量 `TLS_CLIENT_SESSION_CACHE_TTL=30m` 启用；启用后使用下一到期时间触发单飞清理，不会在每个请求完成时扫描全部 session；`TLS_CLIENT_SESSION_CACHE_MAX_ENTRIES=-1` 可恢复无限容量。
+Transport 按目标单飞初始化，不同目标可以并行握手。缓存默认最多保留 256 个 host/protocol 条目，可通过 `TransportOptions.MaxCachedTransports` 调整，`-1` 表示不限制。支持恢复的画像默认保留 32 个 TLS session，可通过 `TransportOptions.TLSClientSessionCacheSize` 调整。
 
 ## WebSocket
 
-WebSocket 复用 HTTP 客户端的 TLS Dialer。当前建议为 WebSocket 客户端启用 HTTP/1.1：
+WebSocket 会复用 HTTP 客户端的 TLS 画像和 Dialer。当前建议强制使用 HTTP/1.1：
 
 ```go
 client, err := tls_client.NewHttpClient(nil,
@@ -277,16 +215,16 @@ ws, err := tls_client.NewWebsocket(nil,
 )
 ```
 
-完整连接方式请参考 [`websocket.go`](./websocket.go) 和 [`tests/websocket_test.go`](./tests/websocket_test.go)。
+更多用法见 [`websocket.go`](./websocket.go) 和 [`tests/websocket_test.go`](./tests/websocket_test.go)。
 
-## CFFI / 多语言调用
+## CFFI 与多语言调用
 
-CFFI 入口位于 [`cffi_dist`](./cffi_dist)，请求构建和 session 管理位于 [`cffi_src`](./cffi_src)。示例目录：
+[`cffi_dist`](./cffi_dist) 提供 C shared library 入口，并包含以下示例：
 
-- [`cffi_dist/example_python`](./cffi_dist/example_python)
-- [`cffi_dist/example_node`](./cffi_dist/example_node)
-- [`cffi_dist/example_typescript`](./cffi_dist/example_typescript)
-- [`cffi_dist/example_csharp`](./cffi_dist/example_csharp)
+- [Python](./cffi_dist/example_python)
+- [Node.js](./cffi_dist/example_node)
+- [TypeScript](./cffi_dist/example_typescript)
+- [C#](./cffi_dist/example_csharp)
 
 请求示例：
 
@@ -305,35 +243,32 @@ CFFI 入口位于 [`cffi_dist`](./cffi_dist)，请求构建和 session 管理位
 }
 ```
 
-CFFI 请求可设置 `maxResponseBodyBytes` 限制内存响应大小；设置
-`streamOutputPath` 时同样会限制写入文件的响应字节数。`streamOutputBlockSize`
-默认使用 32 KiB，显式设置时必须为正数且不超过 16 MiB。字节响应会直接流式
-编码到最终 Base64 data URL，避免为大型响应额外构造未使用的原始字符串副本。最终 JSON 会直接复制到 C 持有的返回缓冲区，不再先构造一份同等大小的 Go 字符串；调用方仍须按原有 ABI 使用 `freeMemory` 释放结果。
+### Session 模型
 
-`transportOptions.maxCachedTransports` 控制单个 CFFI Client 的 Transport LRU 上限：`0` 使用默认 256，`-1` 表示不限制。`transportOptions.tlsClientSessionCacheSize` 控制单个 Client 的 TLS session 缓存容量，`0` 使用默认 32。`transportOptions.protocolRacingHttp2Delay` 和 `transportOptions.protocolRacingTimeout` 使用 Go duration 的纳秒 JSON 数值；省略时保持默认竞速时序。CFFI session 缓存可在进程启动前配置：
+- 不同 `sessionId` 可以并行执行；
+- 同一 `sessionId` 的完整请求生命周期串行执行，动态代理、Cookie 和重定向配置不会互相覆盖；
+- `RemoveSession` 与 `ClearSessionCache` 会等待相关 session 操作结束后再回收连接；
+- session 缓存默认最多保留 1024 个条目，正在执行或等待的 session 不会被驱逐；
+- idle TTL 默认关闭，可通过 `TLS_CLIENT_SESSION_CACHE_TTL=30m` 启用；
+- `TLS_CLIENT_SESSION_CACHE_MAX_ENTRIES=-1` 可关闭容量限制。
 
-```text
-TLS_CLIENT_SESSION_CACHE_MAX_ENTRIES=1024
-TLS_CLIENT_SESSION_CACHE_TTL=30m
-```
-
-也可以在运行时调用导出的 C ABI：
+运行时也可以调用导出的 C ABI：
 
 ```text
 configureSessionCache({"maxEntries":1024,"idleTTL":"30m"})
 ```
 
-`maxEntries` 为 `0` 时恢复默认 1024，`-1` 表示无限；`idleTTL` 使用 Go duration 语法，空字符串或 `"0s"` 关闭 TTL。容量或 TTL 清理只回收没有活动 flight 的 session；默认关闭 TTL 且未超过容量时，请求释放路径不会扫描全局 session 缓存。
+CFFI 返回的 JSON 缓冲区仍需通过 `freeMemory` 释放。大响应可通过 `maxResponseBodyBytes` 限制大小，或使用 `streamOutputPath` 流式写入文件。
 
-`cffi_dist/go.mod` 使用：
+### 构建动态库
+
+`cffi_dist` 是独立 Go module，并通过下面的配置链接当前工作树：
 
 ```go
 replace github.com/bogdanfinn/tls-client => ../
 ```
 
-因此仓库内构建的动态库会链接当前工作树，而不是已发布的旧上游版本。不要在同步上游时无意删除该 `replace`。
-
-本机具备 Go 和 C 编译器后，可以在对应平台直接构建：
+Linux 示例：
 
 ```bash
 cd cffi_dist
@@ -341,7 +276,7 @@ go mod download
 go build -buildmode=c-shared -o dist/tls-client.so .
 ```
 
-Windows 使用 Go 1.26.5 时，链接阶段的临时 DLL 基础名不要包含 `-`；Go 生成的 `.def` 会把该名称写入未加引号的 `LIBRARY` 指令，MinGW 会将连字符解析为语法错误。先用安全名称构建，再按分发约定重命名 DLL 和头文件：
+Windows 使用 Go 1.26.x 时，链接阶段的 DLL 基础名不能包含 `-`。请先使用安全名称构建，再同时重命名 DLL 与头文件：
 
 ```powershell
 go build -buildmode=c-shared -o dist/tls_client.dll .
@@ -349,77 +284,67 @@ Move-Item dist/tls_client.dll dist/tls-client.dll
 Move-Item dist/tls_client.h dist/tls-client.h
 ```
 
-macOS 输出文件可改为 `dist/tls-client.dylib`。跨平台构建参考 [`cffi_dist/build.sh`](./cffi_dist/build.sh) 和两个 Dockerfile；脚本中的 Windows 目标已内置“安全临时名 → 兼容分发名”处理。
+跨平台构建见 [`cffi_dist/build.sh`](./cffi_dist/build.sh)、[`Dockerfile.alpine.compile`](./cffi_dist/Dockerfile.alpine.compile) 和 [`Dockerfile.ubuntu.compile`](./cffi_dist/Dockerfile.ubuntu.compile)。
 
-## 测试与验证
+## 已知限制
 
-### 不访问公网的基础验证
+- 默认画像是 `Chrome_150`；其 TLS 基础来自 `Chrome_146`，ML-DSA 签名算法仍等待 uTLS 支持；
+- 显式 PSK 画像用于会话恢复，不适合作为随机 session 的首次握手画像；
+- HTTP/3 是否可用取决于目标服务、UDP 网络、防火墙和 QUIC 实现；
+- 自定义 JA3、HTTP/2、HTTP/3 参数可能产生真实客户端中不存在的组合；
+- `InsecureSkipVerify` 会降低证书校验安全性，且不能与证书 Pinning 同时使用；
+- TLS/HTTP 指纹不能模拟 JavaScript、DOM、字体、Canvas 或用户行为轨迹。
+
+## 开发与验证
+
+不访问公网的基础验证：
 
 ```bash
-gofmt -w <本次修改的 Go 文件>
 go test . ./profiles ./bandwidth ./cffi_src
 go test -run '^$' ./...
 go vet ./...
 go test -race . ./profiles ./bandwidth ./cffi_src
 ```
 
-嵌套 CFFI module 必须单独编译：
+`cffi_dist` 需要单独编译：
 
 ```bash
 cd cffi_dist
 go test -run '^$' ./...
 ```
 
-仓库中的部分 `tests` 会访问公网，不能在离线验证时直接运行完整的 `go test ./...`。CI 使用精确正则执行本地 `httptest` 集成用例，并离线校验已记录 JA3/Akamai hash 与注册画像实际生成的 JA3；配置见 [`.github/workflows/ci.yml`](./.github/workflows/ci.yml)。
-
-### 在线画像验证
-
-[`tests/ja3_integration_test.go`](./tests/ja3_integration_test.go) 使用 `integration` build tag：
+默认 CI 不运行依赖公网的完整 `tests`。在线画像验证需要显式使用 `integration` build tag：
 
 ```bash
 go test -tags=integration ./tests -run '^TestJA3Integration_'
 ```
 
-该测试需要访问外部指纹服务，只应在网络可用且明确需要验证画像时运行。
+参与开发或同步来源项目更新前，请先阅读 [`AGENTS.md`](./AGENTS.md)。其中记录了本项目的行为不变量、冲突热点和完整验证要求。
 
-## 已知边界
-
-- `DefaultClientProfile` 当前为 `Chrome_150`；其 TLS 基础来自 `Chrome_146`，ML-DSA 签名算法仍等待上游 uTLS 支持，可通过 `ProfilesWithKnownGaps` 查询；
-- 显式 PSK 画像用于会话恢复场景，不应作为随机 session 的首次握手画像；
-- HTTP/3 是否可用取决于目标服务、UDP 网络、防火墙和 QUIC 实现；
-- 自定义 JA3/HTTP2/HTTP3 参数可以生成现实中不存在的组合，调用方需要自行验证；
-- `InsecureSkipVerify` 会降低证书验证安全性，并且不能与证书 Pinning 同时启用；
-- TLS/HTTP 指纹无法模拟 JavaScript、DOM、字体、Canvas、行为轨迹等浏览器环境。
-
-## 目录结构
+## 项目结构
 
 ```text
 tls-client/
-├─ client.go                 HTTP 客户端、动态状态、Hook、Cookie/代理接口
-├─ client_options.go         客户端配置项和防御性复制
-├─ roundtripper.go           TLS 握手、Transport 缓存、HTTP/1.1/2/3 路由
-├─ racer.go                  HTTP/3 与 HTTP/2 协议竞速
-├─ websocket.go              WebSocket 封装
-├─ profiles/                 浏览器画像、解析器、元数据
-├─ bandwidth/                带宽统计
-├─ cffi_src/                 CFFI 请求、响应和 session 管理
-├─ cffi_dist/                c-shared 入口和多语言示例（独立 Go module）
-├─ tests/                    本地与在线集成测试
-└─ AGENTS.md                 上游同步和本地增强保留规则
+├─ client.go             HTTP 客户端与动态状态
+├─ client_options.go     客户端配置
+├─ roundtripper.go       TLS 握手与 Transport 缓存
+├─ racer.go              HTTP/3 与 HTTP/2 Protocol Racing
+├─ websocket.go          WebSocket 支持
+├─ profiles/             客户端画像、解析器与元数据
+├─ bandwidth/            带宽统计
+├─ cffi_src/             CFFI 请求、响应与 session 管理
+├─ cffi_dist/            C shared library 与多语言示例
+└─ tests/                本地及在线集成测试
 ```
 
-## 跟进上游更新
+## 来源与致谢
 
-本仓库保留上游模块路径，并预计继续合并 `bogdanfinn/tls-client` 的更新。由于本地增强集中在客户端状态、Transport、协议竞速、画像和 CFFI 等高冲突区域，后续同步不能简单使用整文件 `ours/theirs` 覆盖。
+本项目建立在以下开源项目和设计工作的基础上：
 
-详细合并规则、冲突热点、本地不变量和验证矩阵见 [`AGENTS.md`](./AGENTS.md)。以后让自动化工具或 AI 协助同步上游前，应先读取该文件。
+- [bogdanfinn/tls-client](https://github.com/bogdanfinn/tls-client)
+- [bogdanfinn/fhttp](https://github.com/bogdanfinn/fhttp)
+- [bogdanfinn/utls](https://github.com/bogdanfinn/utls)
+- [refraction-networking/utls](https://github.com/refraction-networking/utls)
+- [kurl-client](https://gitee.com/hqs666/kurl-client)
 
-## 上游与致谢
-
-- 上游项目：[bogdanfinn/tls-client](https://github.com/bogdanfinn/tls-client)
-- HTTP 实现：[bogdanfinn/fhttp](https://github.com/bogdanfinn/fhttp)
-- TLS 实现：[bogdanfinn/utls](https://github.com/bogdanfinn/utls)、[refraction-networking/utls](https://github.com/refraction-networking/utls)
-- 设计参考：[kurl-client](https://gitee.com/hqs666/kurl-client)
-- 上游详细文档：[Open Source Oasis](https://bogdanfinn.gitbook.io/open-source-oasis/)
-
-许可证见 [`LICENSE`](./LICENSE)。
+项目在保留来源版权与许可证要求的前提下独立维护。许可证全文见 [`LICENSE`](./LICENSE)。
