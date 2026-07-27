@@ -45,12 +45,13 @@ import (
 // ─── Error Codes ──────────────────────────────────────────
 
 const (
-	errOK         = 0
-	errNetwork    = 1
-	errHTTP       = 2
-	errSession    = 3
-	errTimeout    = 4
-	errProfile    = 5
+	errOK          = 0
+	errNetwork     = 1
+	errHTTP        = 2
+	errSession     = 3
+	errTimeout     = 4
+	errProfile     = 5
+	maxSessions    = 10000 // hard limit; oldest session evicted on overflow
 )
 
 // ─── Session ──────────────────────────────────────────────
@@ -69,6 +70,7 @@ type apiSession struct {
 	reqCount     int // total request counter
 	tlsRefresh   int // force new TLS handshake every N requests (default 50)
 	h2Randomize  bool // randomize H2 settings (Chaos mode defaults to true)
+	needRebuild  bool // set by setters, consumed by apiRequest
 
 	// Proxy rotation
 	proxyList   []string // proxy pool for rotation
@@ -86,36 +88,32 @@ var (
 
 // ─── Internal helpers ──────────────────────────────────────
 
-func (s *apiSession) rebuild() {
-	pid := s.profileID
+func buildClient(pid int, proxy string, timeout int, h2Randomize bool, caCert string, jar http.CookieJar) (tls_client.HttpClient, error) {
 	p, err := profiles.ResolveProfileID(profiles.ProfileID(pid))
 	if err != nil {
-		return
+		return nil, err
 	}
-
-	// Preserve the cookie jar across rebuilds.
-	oldJar := s.client.GetCookieJar()
-
 	opts := []tls_client.HttpClientOption{
-		tls_client.WithTimeoutSeconds(s.timeout),
+		tls_client.WithTimeoutSeconds(timeout),
 		tls_client.WithClientProfile(p),
-		tls_client.WithCookieJar(oldJar),
+		tls_client.WithCookieJar(jar),
 		tls_client.WithNotFollowRedirects(),
 	}
-	if s.proxy != "" {
-		opts = append(opts, tls_client.WithProxyUrl(s.proxy))
+	if proxy != "" {
+		opts = append(opts, tls_client.WithProxyUrl(proxy))
 	}
-	if s.h2Randomize {
+	if h2Randomize {
 		opts = append(opts, tls_client.WithRandomTLSExtensionOrder())
 	}
-	if s.caCert != "" {
+	if caCert != "" {
 		opts = append(opts, tls_client.WithInsecureSkipVerify())
 	}
-	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
-	if err != nil {
-		return
-	}
-	s.client = client
+	return tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
+}
+
+func (s *apiSession) rebuild() {
+	// Called under s.mu. Set flag; actual I/O happens in apiRequestWithType.
+	s.needRebuild = true
 }
 
 // ─── Core API ─────────────────────────────────────────────
@@ -195,6 +193,15 @@ func tg_session_create(profileID C.int, timeoutSeconds C.int, proxyURL *C.char) 
 	}
 
 	apiSessionsMu.Lock()
+	// LRU eviction: if at capacity, remove the oldest session.
+	if len(apiSessions) >= maxSessions {
+		var oldestID string
+		for k := range apiSessions {
+			oldestID = k
+			break
+		}
+		delete(apiSessions, oldestID)
+	}
 	apiSessions[id] = s
 	apiSessionsMu.Unlock()
 
@@ -661,32 +668,56 @@ func apiRequestWithType(sessionID *C.char, method string, requestURL *C.char, bo
 	// ─── Anti-detection: rotation + TLS refresh ───────────
 	s.mu.Lock()
 	s.reqCount++
+	needRebuild := false
 
 	// Profile rotation (Chaos mode: random profile every request + force TLS refresh)
 	if s.rotateGroup == 6 {
 		s.profileID = int(profiles.ChaosProfile())
-		s.rebuild()
+		needRebuild = true
 	} else if s.rotateGroup > 0 && s.rotateEvery > 0 && s.reqCount%s.rotateEvery == 0 {
 		nextPID, err := profiles.NextRotateProfile(profiles.RotateGroup(s.rotateGroup), s.reqCount)
 		if err == nil {
 			s.profileID = int(nextPID)
-			s.rebuild()
+			needRebuild = true
 		}
 	}
 
 	// TLS context refresh (new ClientHello, new session ticket)
-	// Chaos: always refresh; normal: periodic
 	if s.rotateGroup == 6 || (s.tlsRefresh > 0 && s.reqCount%s.tlsRefresh == 0) {
-		s.rebuild()
+		needRebuild = true
+	}
+
+	// Deferred rebuild from setters (tg_session_set_*)
+	if s.needRebuild {
+		needRebuild = true
+		s.needRebuild = false
 	}
 
 	// Proxy rotation
 	if len(s.proxyList) > 0 && s.proxyRotate > 0 && s.reqCount%s.proxyRotate == 0 {
 		s.proxyIdx = (s.proxyIdx + 1) % len(s.proxyList)
 		s.proxy = s.proxyList[s.proxyIdx]
-		s.rebuild()
+		needRebuild = true
 	}
+
+	// Snapshot params needed for rebuild; release lock before I/O
+	pid := s.profileID
+	proxy := s.proxy
+	timeout := s.timeout
+	h2 := s.h2Randomize
+	ca := s.caCert
+	oldJar := s.client.GetCookieJar()
 	s.mu.Unlock()
+
+	// Build new client OUTSIDE the lock (no network I/O in critical section)
+	if needRebuild {
+		client, err := buildClient(pid, proxy, timeout, h2, ca, oldJar)
+		if err == nil {
+			s.mu.Lock()
+			s.client = client
+			s.mu.Unlock()
+		}
+	}
 
 	urlStr := C.GoString(requestURL)
 

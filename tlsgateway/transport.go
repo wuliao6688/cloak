@@ -33,6 +33,7 @@ type Transport struct {
 
 	randomExtensionOrder bool
 	serverNameOverwrite  string
+	insecureSkipVerify   bool
 }
 
 var _ http.RoundTripper = (*Transport)(nil)
@@ -42,9 +43,11 @@ type TransportOptions struct {
 	RandomExtensionOrder bool
 	ServerNameOverwrite  string
 	Proxy                func(*http.Request) (*url.URL, error)
+	InsecureSkipVerify   bool // default: false (certificates verified)
 }
 
 // NewTransport creates a Transport using the given profile.
+// TLS certificate verification is enabled by default.
 func NewTransport(profile profiles.ClientProfile) *Transport {
 	return NewTransportWithOptions(profile, TransportOptions{})
 }
@@ -55,6 +58,7 @@ func NewTransportWithOptions(profile profiles.ClientProfile, opts TransportOptio
 		profile:              profile,
 		randomExtensionOrder: opts.RandomExtensionOrder,
 		serverNameOverwrite:  opts.ServerNameOverwrite,
+		insecureSkipVerify:   opts.InsecureSkipVerify,
 	}
 
 	// Plain HTTP (no TLS).
@@ -72,7 +76,7 @@ func NewTransportWithOptions(profile profiles.ClientProfile, opts TransportOptio
 		DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
 			return t.dialTLS(ctx, network, addr)
 		},
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: t.insecureSkipVerify},
 	}
 
 	// HTTPS fallback to HTTP/1.1 (when server doesn't support H2).
@@ -169,6 +173,7 @@ func (t *Transport) dialTLS(ctx context.Context, network, addr string) (net.Conn
 	profile := t.profile
 	randomOrder := t.randomExtensionOrder
 	sniOverride := t.serverNameOverwrite
+	insecure := t.insecureSkipVerify
 	t.profileMu.RUnlock()
 
 	dialer := &net.Dialer{}
@@ -188,7 +193,7 @@ func (t *Transport) dialTLS(ctx context.Context, network, addr string) (net.Conn
 
 	utlsConfig := &utls.Config{
 		ServerName:         host,
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: insecure,
 		OmitEmptyPsk:       true,
 		ClientSessionCache: utls.NewLRUClientSessionCache(32),
 	}
