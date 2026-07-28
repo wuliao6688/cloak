@@ -1,9 +1,12 @@
 package tlsgateway
 
 import (
-	"io"
+	"bytes"
 	"context"
+	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -23,22 +26,23 @@ type Request struct {
 	retryCount     int
 	retryCondition RetryConditionFunc
 	retryInterval  GetRetryIntervalFunc
+
+	queryParams map[string]string
+	baseURL     string
+	outputFile  string
+	output      io.Writer
 }
 
 // SetHeader sets a request header.
 func (r *Request) SetHeader(key, value string) *Request {
-	if r.headers == nil {
-		r.headers = make(map[string]string)
-	}
+	if r.headers == nil { r.headers = make(map[string]string) }
 	r.headers[key] = value
 	return r
 }
 
 // SetHeaders sets multiple request headers.
 func (r *Request) SetHeaders(h map[string]string) *Request {
-	for k, v := range h {
-		r.SetHeader(k, v)
-	}
+	for k, v := range h { r.SetHeader(k, v) }
 	return r
 }
 
@@ -59,6 +63,84 @@ func (r *Request) SetRetry(count int, condition RetryConditionFunc, minInterval,
 	return r
 }
 
+// SetQueryParam adds a single query parameter.
+func (r *Request) SetQueryParam(key, value string) *Request {
+	if r.queryParams == nil { r.queryParams = make(map[string]string) }
+	r.queryParams[key] = value
+	return r
+}
+
+// SetQueryParams sets multiple query parameters.
+func (r *Request) SetQueryParams(params map[string]string) *Request {
+	for k, v := range params { r.SetQueryParam(k, v) }
+	return r
+}
+
+// SetBaseURL sets the base URL for relative paths.
+func (r *Request) SetBaseURL(base string) *Request { r.baseURL = base; return r }
+
+// SetBearerAuthToken sets the Authorization: Bearer header.
+func (r *Request) SetBearerAuthToken(token string) *Request {
+	return r.SetHeader("Authorization", "Bearer "+token)
+}
+
+// SetBasicAuth sets the Authorization: Basic header.
+func (r *Request) SetBasicAuth(username, password string) *Request {
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.SetBasicAuth(username, password)
+	return r.SetHeader("Authorization", req.Header.Get("Authorization"))
+}
+
+// SetBody sets the request body reader.
+func (r *Request) SetBody(body io.Reader) *Request { r.body = body; return r }
+
+// SetBodyString sets the request body from a string.
+func (r *Request) SetBodyString(s string) *Request {
+	return r.SetBody(strings.NewReader(s))
+}
+
+// SetBodyBytes sets the request body from bytes.
+func (r *Request) SetBodyBytes(b []byte) *Request {
+	return r.SetBody(bytes.NewReader(b))
+}
+
+// SetCookies sets cookies on the request.
+func (r *Request) SetCookies(cookies ...*http.Cookie) *Request {
+	for _, c := range cookies {
+		r.SetHeader("Cookie", c.String())
+	}
+	return r
+}
+
+// SetOutputFile saves the response body to a file.
+func (r *Request) SetOutputFile(file string) *Request {
+	r.outputFile = file
+	return r
+}
+
+// SetOutput writes the response body to an io.Writer.
+func (r *Request) SetOutput(w io.Writer) *Request {
+	r.output = w
+	return r
+}
+
+// buildURL constructs the full URL with base URL and query parameters.
+func (r *Request) buildURL() string {
+	u := r.url
+	if r.baseURL != "" && !strings.HasPrefix(u, "http") {
+		u = strings.TrimRight(r.baseURL, "/") + "/" + strings.TrimLeft(u, "/")
+	}
+	if len(r.queryParams) > 0 {
+		sep := "?"
+		if strings.Contains(u, "?") { sep = "&" }
+		for k, v := range r.queryParams {
+			u += sep + url.QueryEscape(k) + "=" + url.QueryEscape(v)
+			sep = "&"
+		}
+	}
+	return u
+}
+
 // Get executes a GET request.
 func (r *Request) Get(urlStr string) (*Response, error) {
 	r.method = "GET"
@@ -74,10 +156,6 @@ func (r *Request) Post(urlStr string) (*Response, error) {
 }
 
 func (r *Request) do() (*Response, error) {
-	rc, ok := r.client.Transport.(*roundTripperChain)
-	_ = ok
-	_ = rc
-
 	return r.executeWithRetry()
 }
 
@@ -109,8 +187,9 @@ func (r *Request) executeWithRetry() (*Response, error) {
 }
 
 func (r *Request) execute() (*Response, error) {
-	// Build http request.
-	req, err := http.NewRequestWithContext(context.Background(), r.method, r.url, r.body)
+	fullURL := r.buildURL()
+
+	req, err := http.NewRequestWithContext(context.Background(), r.method, fullURL, r.body)
 	if err != nil {
 		return nil, err
 	}
@@ -118,16 +197,13 @@ func (r *Request) execute() (*Response, error) {
 		req.Header.Set(k, v)
 	}
 
-	// Trace timing.
 	ti := newTraceInfo()
 	req = req.WithContext(context.WithValue(req.Context(), traceKey{}, ti))
 
-	// Dump request if enabled.
 	if r.dumpOpts != nil && r.dumpOpts.RequestHeader {
 		r.dumpOpts.dumpRequest(req)
 	}
 
-	// Execute.
 	httpResp, err := r.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -141,19 +217,26 @@ func (r *Request) execute() (*Response, error) {
 		errorResult:   r.errorResult,
 	}
 
-	// Dump response if enabled.
 	if r.dumpOpts != nil && r.dumpOpts.ResponseHeader {
 		r.dumpOpts.dumpResponse(resp)
 	}
 
-	// Auto-unmarshal.
 	resp.autoUnmarshal()
+
+	// Save to file if requested.
+	if r.outputFile != "" {
+		body := resp.BodyBytes()
+		os.WriteFile(r.outputFile, body, 0644)
+	}
+	if r.output != nil {
+		r.output.Write(resp.BodyBytes())
+	}
+
 	return resp, nil
 }
 
 type traceKey struct{}
 
-// roundTripperChain wraps multiple RoundTrippers.
 type roundTripperChain struct {
 	chain []func(http.RoundTripper) http.RoundTripper
 	base  http.RoundTripper
@@ -167,4 +250,4 @@ func (c *roundTripperChain) RoundTrip(req *http.Request) (*http.Response, error)
 	return rt.RoundTrip(req)
 }
 
-var _ = strings.TrimSpace // ensure import used
+var _ = strings.TrimSpace

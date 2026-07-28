@@ -304,3 +304,12 @@ func ImpersonateRequest(profile profiles.ClientProfile) *Request {
 	client := Impersonate(profile)
 	return &Request{client: client}
 }
+
+// DevMode creates an impersonated Client with full debug dump enabled.
+// Equivalent to req's req.DevMode().ImpersonateChrome().
+func DevMode(profile profiles.ClientProfile) *http.Client {
+	return ImpersonateChain(profile).
+		SetDebug(os.Stderr).
+		WithOrderedHeaders().
+		Build()
+}

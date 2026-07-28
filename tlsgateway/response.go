@@ -110,3 +110,15 @@ func (r *Response) ErrorResult() any { return r.errorResult }
 
 // UnmarshalErr returns any error from auto-unmarshalling.
 func (r *Response) UnmarshalErr() error { return r.unmarshalErr }
+
+// String returns the response body as a string.
+func (r *Response) String() string { return string(r.BodyBytes()) }
+
+// Bytes returns the response body as bytes.
+func (r *Response) Bytes() []byte { return r.BodyBytes() }
+
+// ToString returns the response body as string, with error.
+func (r *Response) ToString() (string, error) {
+	b := r.BodyBytes()
+	return string(b), r.unmarshalErr
+}
