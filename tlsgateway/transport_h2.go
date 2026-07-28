@@ -17,16 +17,22 @@ import (
 )
 
 // Transport is an http.RoundTripper that applies a TLS ClientHello
-// fingerprint from a profiles.ClientProfile.
+// fingerprint from a profiles.ClientProfile. It is the zero-fork
+// default — only depends on utls + x/net/http2 + standard library.
 //
 // Protocol negotiation:
 //   - HTTPS → HTTP/2 (x/net/http2 + uTLS)
 //   - If server doesn't support H2 → automatic fallback to HTTP/1.1 over TLS
 //   - HTTP  → HTTP/1.1 (net/http)
+//
+// Build-tag extensions (opt-in only):
+//
+//	go build -tags h3     → adds HTTP/3 support
+//	go build -tags fhttp  → adds Akamai-level H2 SETTINGS customization
 type Transport struct {
-	h2   *http2.Transport   // primary: HTTPS with HTTP/2
-	h1   *http.Transport     // fallback: HTTP/1.1 over TLS
-	h1p  *http.Transport     // plain HTTP (no TLS)
+	h2  *http2.Transport // primary: HTTPS with HTTP/2
+	h1  *http.Transport   // fallback: HTTP/1.1 over TLS
+	h1p *http.Transport   // plain HTTP (no TLS)
 
 	profileMu sync.RWMutex
 	profile   profiles.ClientProfile
@@ -48,6 +54,7 @@ type TransportOptions struct {
 
 // NewTransport creates a Transport using the given profile.
 // TLS certificate verification is enabled by default.
+// This is the zero-fork default — no fhttp, no QUIC fork.
 func NewTransport(profile profiles.ClientProfile) *Transport {
 	return NewTransportWithOptions(profile, TransportOptions{})
 }
@@ -122,7 +129,6 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// H2 failed — check if server doesn't support it.
-	// x/net/http2 errors include "unexpected ALPN" or protocol-level failures.
 	if isProtocolError(err) {
 		return t.h1.RoundTrip(req)
 	}
@@ -137,7 +143,6 @@ func isProtocolError(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	// H2-specific protocol errors that mean the server only speaks H1.
 	switch {
 	case contains(msg, "http2: frame too large") && contains(msg, "HTTP/1.1"):
 		return true

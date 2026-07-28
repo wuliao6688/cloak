@@ -1,5 +1,39 @@
 # Changelog
 
+## v1.7.0 — tlsgateway 分层架构 (2026-07-28)
+
+### 🏗️ tlsgateway 分层 Transport 架构
+
+将单一 `Transport` 重构为按需激活的分层架构：
+
+| 文件 | 构建 | 依赖 | 用途 |
+|---|---|---|---|
+| `transport_h2.go` | 默认 | utls + x/net/http2 + stdlib | **零 fork 默认** — H2 + H1.1 自动降级 |
+| `transport_race.go` | 默认 | 同上 | **零 fork 竞速** — H2 vs H1.1 Happy Eyeballs |
+| `transport_h3.go` | `-tags h3` | + quic-go-utls | HTTP/3 (QUIC) + H3/H2 竞速 |
+| `transport_fhttp.go` | `-tags fhttp` | + fhttp | Akamai 级 H2 SETTINGS/PRIORITY 定制 |
+
+### 使用方式
+
+```go
+// 默认（零 fork）
+tr := tlsgateway.NewTransport(profiles.Chrome_150)
+
+// 竞速（零 fork）
+tr := tlsgateway.NewRaceTransport(profiles.Chrome_150, tlsgateway.DefaultRaceOptions())
+
+// HTTP/3（go build -tags h3）
+tr := tlsgateway.NewH3Transport(profiles.Chrome_150, tlsgateway.H3Options{PreferH3: true})
+
+// Akamai H2（go build -tags fhttp）
+tr := tlsgateway.NewFhttpTransport(profiles.Chrome_150, tlsgateway.FhttpOptions{})
+```
+
+### 设计决策
+- **默认零 fork**：`go build` 只依赖 uTLS(Tor团队) + x/net/http2(Go官方) + 标准库
+- **H3 需 fork**：QUIC 协议内嵌 TLS 1.3，无法像 TCP 那样 hook 连接层。bogdanfinn/quic-go-utls 是唯一的 uTLS+QUIC 方案
+- **fhttp 可选**：仅 Akamai/DataDome 级检测需要 H2 SETTINGS 定制
+
 ## v1.6.3 — 安全加固 & 死代码清理 (2026-07-28)
 
 ### 🔴 P0 修复

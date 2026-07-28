@@ -2,13 +2,24 @@
 
 ## 项目架构
 
-本项目有两层：
+本项目有三层：
 
 | 层 | 位置 | 作用 |
 |----|------|------|
-| **tlsgateway**（主推荐） | `tlsgateway/`、`cmd/tlsgateway-proxy/` | 轻量 Transport + 本地代理。依赖仅为 uTLS + 标准库。 |
+| **tlsgateway**（主推荐） | `tlsgateway/`、`cmd/tlsgateway-proxy/` | 分层 Transport（默认零 fork + 按需激活 H3/fhttp）+ 本地代理 |
 | **完整 tls-client**（Fork 版本） | 根目录、`cffi_src/`、`cffi_dist/` | 完整协议控制（H3、Racing、CFFI）。依赖 fhttp fork。 |
-| **profiles**（共享） | `profiles/` | 两层共用：画像定义、解析、JSON 加载、热加载、指纹验证。 |
+| **profiles**（共享） | `profiles/` | 三层共用：画像定义、解析、JSON 加载、热加载、指纹验证。 |
+
+### tlsgateway 分层架构 (v1.7.0)
+
+| 文件 | 构建 | fork 数 | 用途 |
+|------|------|---------|------|
+| `transport_h2.go` | 默认 | **0** | uTLS + x/net/http2 — H2 + H1.1 自动降级 |
+| `transport_race.go` | 默认 | **0** | H2 vs H1.1 Protocol Racing (Happy Eyeballs) |
+| `transport_h3.go` | `-tags h3` | 1 (quic-go-utls) | HTTP/3 (QUIC) — QUIC 协议内嵌 TLS，无法零 fork |
+| `transport_fhttp.go` | `-tags fhttp` | 1 (fhttp) | Akamai 级 H2 SETTINGS/PRIORITY 定制 |
+
+默认 `go build` = 零 fork（仅 uTLS Tor团队 + x/net/http2 Go官方 + 标准库）。
 
 ## profiles — 共享画像层
 
