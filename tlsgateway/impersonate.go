@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bogdanfinn/tls-client/profiles"
@@ -47,12 +48,14 @@ func ImpersonateChain(profile profiles.ClientProfile) *ChainBuilder {
 //	    SetTimeout(10 * time.Second).
 //	    Build()
 type ChainBuilder struct {
-	tr      *Transport
-	profile profiles.ClientProfile
-	timeout time.Duration
-	ua      string
-	debug   io.Writer
-	headers map[string]string
+	tr            *Transport
+	profile       profiles.ClientProfile
+	timeout       time.Duration
+	ua            string
+	debug         io.Writer
+	headers       map[string]string
+	orderedHdrs   bool
+	h2Fingerprint *H2Fingerprint
 }
 
 // SetUserAgent overrides the browser User-Agent.
@@ -88,21 +91,45 @@ func (cb *ChainBuilder) Transport() *Transport {
 	return cb.tr
 }
 
+// WithOrderedHeaders enables HTTP/1.1 header ordering to match Chrome's
+// canonical header order. Only affects HTTP/1.1; for H2, pseudo-header
+// and header ordering requires forking x/net/http2 (like req's internal/http2).
+func (cb *ChainBuilder) WithOrderedHeaders() *ChainBuilder {
+	cb.orderedHdrs = true
+	return cb
+}
+
+// WithH2Fingerprint registers H2 fingerprint configuration for use
+// when H2 customization is enabled (via internal/http2 fork or similar).
+func (cb *ChainBuilder) WithH2Fingerprint(fingerprint *H2Fingerprint) *ChainBuilder {
+	cb.h2Fingerprint = fingerprint
+	return cb
+}
+
 // Build creates the impersonated http.Client.
 func (cb *ChainBuilder) Build() *http.Client {
-	htr := NewHeaderRoundTripper(cb.tr, cb.profile)
+	var rt http.RoundTripper = NewHeaderRoundTripper(cb.tr, cb.profile)
+
+	// Apply HTTP/1.1 header ordering if requested.
+	if cb.orderedHdrs {
+		name := cb.profile.GetClientHelloStr()
+		order := ChromeHeaderOrder
+		if strings.Contains(name, "Firefox") || strings.Contains(name, "firefox") {
+			order = FirefoxHeaderOrder
+		}
+		rt = NewOrderedHeadersRoundTripper(rt, order)
+	}
 
 	// Apply custom headers if any.
 	if cb.ua != "" || len(cb.headers) > 0 {
-		htrWrap := &customHeaderRoundTripper{
-			inner:   htr,
+		rt = &customHeaderRoundTripper{
+			inner:   rt,
 			ua:      cb.ua,
 			headers: cb.headers,
 		}
-		return &http.Client{Transport: htrWrap, Timeout: cb.timeout}
 	}
 
-	return &http.Client{Transport: htr, Timeout: cb.timeout}
+	return &http.Client{Transport: rt, Timeout: cb.timeout}
 }
 
 // customHeaderRoundTripper allows overriding specific headers on top
