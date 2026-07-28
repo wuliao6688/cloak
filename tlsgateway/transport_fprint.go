@@ -57,52 +57,49 @@ func NewFingerprintTransportWithOptions(profile profiles.ClientProfile, opts Fin
 func (ft *FingerprintTransport) rebuild() {
 	profile := ft.profile
 
-	// Convert profile H2 settings to internal/http2.Settings.
-	settings := profile.GetSettings()
+	// Get full browser fingerprint for this profile.
+	name := profile.GetClientHelloStr()
+	fp := BrowserFingerprint(name)
+
+	// Convert H2 settings.
 	var h2settings []http2.Setting
-	if len(settings) > 0 {
-		for id, val := range settings {
-			h2settings = append(h2settings, http2.Setting{
-				ID:  http2.SettingID(id),
-				Val: val,
-			})
-		}
-		// Sort by SettingID.
-		for i := 1; i < len(h2settings); i++ {
-			j := i
-			for j > 0 && h2settings[j].ID < h2settings[j-1].ID {
-				h2settings[j], h2settings[j-1] = h2settings[j-1], h2settings[j]
-				j--
-			}
-		}
+	for _, s := range fp.Settings {
+		h2settings = append(h2settings, http2.Setting{
+			ID:  http2.SettingID(s.ID),
+			Val: s.Val,
+		})
 	}
 
-	// Default to Chrome H2 settings if profile doesn't provide enough.
-	if len(h2settings) == 0 {
-		for _, s := range ChromeH2Settings {
-			h2settings = append(h2settings, http2.Setting{
-				ID:  http2.SettingID(s.ID),
-				Val: s.Val,
-			})
-		}
+	streamID := fp.InitialStreamID
+	connFlow := fp.ConnectionFlow
+	if profile.GetConnectionFlow() != 0 {
+		connFlow = profile.GetConnectionFlow()
 	}
 
-	// Ensure Chrome-required settings are present.
-	h2settings = ensureSetting(h2settings, 3, 1000) // MaxConcurrentStreams
-
-	streamID := profile.GetStreamID()
-	if streamID == 0 {
-		streamID = 3 // Chrome default
+	// Convert priority frames.
+	var h2priorityFrames []http2.PriorityFrame
+	for _, pf := range fp.PriorityFrames {
+		h2priorityFrames = append(h2priorityFrames, http2.PriorityFrame{
+			FrameHeader: http2.FrameHeader{
+				StreamID: pf.StreamID,
+			},
+			PriorityParam: http2.PriorityParam{
+				StreamDep: pf.PriorityParam.StreamDep,
+				Exclusive: pf.PriorityParam.Exclusive,
+				Weight:    pf.PriorityParam.Weight,
+			},
+		})
 	}
 
 	ft.h2 = &http2.Transport{
 		DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
 			return ft.dialTLS(ctx, network, addr, false)
 		},
-		Settings:        h2settings,
-		InitialStreamID: streamID,
-		ConnectionFlow:  profile.GetConnectionFlow(),
-		MaxHeaderListSize:          262144,
+		Settings:         h2settings,
+		InitialStreamID:  streamID,
+		ConnectionFlow:   connFlow,
+		PriorityFrames:   h2priorityFrames,
+		MaxHeaderListSize:            262144,
 		StrictMaxConcurrentStreams: false,
 		IdleConnTimeout:            90 * time.Second,
 		ReadIdleTimeout:            30 * time.Second,
@@ -221,14 +218,4 @@ func (ft *FingerprintTransport) CloseIdleConnections() {
 	if ft.h1 != nil {
 		ft.h1.CloseIdleConnections()
 	}
-}
-
-// ensureSetting ensures a setting with the given ID exists.
-func ensureSetting(settings []http2.Setting, id uint16, val uint32) []http2.Setting {
-	for _, s := range settings {
-		if uint16(s.ID) == id {
-			return settings
-		}
-	}
-	return append(settings, http2.Setting{ID: http2.SettingID(id), Val: val})
 }

@@ -60,7 +60,7 @@ const (
 	defaultMaxConcurrentStreams = 1000
 )
 
-// Transport is an HTTP/2 Transport.
+// Transport is an HTTP/2 client Transport.
 //
 // A Transport internally caches connections to servers. It is safe
 // for concurrent use by multiple goroutines.

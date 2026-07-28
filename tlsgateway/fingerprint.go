@@ -12,13 +12,8 @@ import (
 	"github.com/bogdanfinn/tls-client/internal/header"
 )
 
-// ─── H2 SETTINGS types (mirrors req's approach) ─────────────────────────
-//
-// These types define H2 SETTINGS parameters in a fork-free way. Currently
-// used for documentation and browser defaults. Full H2 SETTINGS injection
-// requires forking x/net/http2 (like req's internal/http2).
+// ─── H2 SETTINGS types ──────────────────────────────────────────────────
 
-// H2SettingID is an HTTP/2 setting ID.
 type H2SettingID uint16
 
 const (
@@ -30,25 +25,51 @@ const (
 	H2SettingMaxHeaderListSize    H2SettingID = 0x6
 )
 
-// H2Setting is a single HTTP/2 SETTINGS frame entry.
 type H2Setting struct {
 	ID  H2SettingID
 	Val uint32
 }
 
-// H2Fingerprint holds the complete H2 fingerprint configuration.
-type H2Fingerprint struct {
-	Settings          []H2Setting
-	PseudoHeaderOrder []string
-	HeaderOrder       []string
-	InitialStreamID   uint32
-	ConnectionFlow    uint32
+// PriorityParam is an HTTP/2 PRIORITY parameter.
+type PriorityParam struct {
+	StreamDep uint32
+	Exclusive bool
+	Weight    uint8
 }
 
-// ─── Browser H2 defaults (from req's client_impersonate.go) ────────────
+// PriorityFrame is a single H2 PRIORITY frame sent after initial SETTINGS.
+type PriorityFrame struct {
+	StreamID      uint32
+	PriorityParam PriorityParam
+}
+
+// H2Fingerprint holds the complete H2 fingerprint configuration
+// for a specific browser brand and version.
+type H2Fingerprint struct {
+	// H2 SETTINGS frame values and order.
+	Settings []H2Setting
+	// Initial stream ID (Chrome=3, Firefox=1).
+	InitialStreamID uint32
+	// Connection-level flow control window.
+	ConnectionFlow uint32
+	// HEADERS frame priority.
+	HeaderPriority PriorityParam
+	// PRIORITY frames sent after SETTINGS (Firefox sends 6).
+	PriorityFrames []PriorityFrame
+	// Pseudo-header wire order.
+	PseudoHeaderOrder []string
+	// Regular header wire order.
+	HeaderOrder []string
+	// Default request headers (UA, Accept, Sec-CH-UA, etc.).
+	Headers map[string]string
+}
+
+// ─── Browser fingerprints (from req) ────────────────────────────────────
 
 var (
-	ChromeH2Settings = []H2Setting{
+	// ─── Chrome 120 ──────────────────────────────────────────────────
+
+	ChromeSettings = []H2Setting{
 		{ID: H2SettingHeaderTableSize, Val: 65536},
 		{ID: H2SettingEnablePush, Val: 0},
 		{ID: H2SettingMaxConcurrentStreams, Val: 1000},
@@ -56,82 +77,226 @@ var (
 		{ID: H2SettingMaxHeaderListSize, Val: 262144},
 	}
 
+	ChromeConnectionFlow = uint32(15663105)
+
+	ChromeHeaderPriority = PriorityParam{
+		StreamDep: 0,
+		Exclusive: true,
+		Weight:    255,
+	}
+
 	ChromePseudoHeaderOrder = []string{
-		":method",
-		":authority",
-		":scheme",
-		":path",
+		":method", ":authority", ":scheme", ":path",
 	}
 
 	ChromeHeaderOrder = []string{
-		"host",
-		"pragma",
-		"cache-control",
-		"sec-ch-ua",
-		"sec-ch-ua-mobile",
-		"sec-ch-ua-platform",
-		"upgrade-insecure-requests",
-		"user-agent",
-		"accept",
-		"sec-fetch-site",
-		"sec-fetch-mode",
-		"sec-fetch-user",
-		"sec-fetch-dest",
-		"referer",
-		"accept-encoding",
-		"accept-language",
-		"cookie",
+		"host", "pragma", "cache-control", "sec-ch-ua",
+		"sec-ch-ua-mobile", "sec-ch-ua-platform",
+		"upgrade-insecure-requests", "user-agent", "accept",
+		"sec-fetch-site", "sec-fetch-mode", "sec-fetch-user",
+		"sec-fetch-dest", "referer", "accept-encoding",
+		"accept-language", "cookie",
+	}
+
+	ChromeHeaders = map[string]string{
+		"pragma":                    "no-cache",
+		"cache-control":             "no-cache",
+		"sec-ch-ua":                 `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`,
+		"sec-ch-ua-mobile":          "?0",
+		"sec-ch-ua-platform":        `"macOS"`,
+		"upgrade-insecure-requests": "1",
+		"user-agent":                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		"accept":                    "text/html,application/xhtml+xml,application/xml,application/json;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+		"sec-fetch-site":            "none",
+		"sec-fetch-mode":            "navigate",
+		"sec-fetch-user":            "?1",
+		"sec-fetch-dest":            "document",
+		"accept-language":           "zh-CN,zh;q=0.9",
+	}
+
+	// ─── Firefox 120 ─────────────────────────────────────────────────
+
+	FirefoxSettings = []H2Setting{
+		{ID: H2SettingHeaderTableSize, Val: 65536},
+		{ID: H2SettingInitialWindowSize, Val: 131072},
+		{ID: H2SettingMaxFrameSize, Val: 16384},
+	}
+
+	FirefoxConnectionFlow = uint32(12517377)
+
+	FirefoxPriorityFrames = []PriorityFrame{
+		{StreamID: 3, PriorityParam: PriorityParam{StreamDep: 0, Exclusive: false, Weight: 200}},
+		{StreamID: 5, PriorityParam: PriorityParam{StreamDep: 0, Exclusive: false, Weight: 100}},
+		{StreamID: 7, PriorityParam: PriorityParam{StreamDep: 0, Exclusive: false, Weight: 0}},
+		{StreamID: 9, PriorityParam: PriorityParam{StreamDep: 7, Exclusive: false, Weight: 0}},
+		{StreamID: 11, PriorityParam: PriorityParam{StreamDep: 3, Exclusive: false, Weight: 0}},
+		{StreamID: 13, PriorityParam: PriorityParam{StreamDep: 0, Exclusive: false, Weight: 240}},
+	}
+
+	FirefoxHeaderPriority = PriorityParam{
+		StreamDep: 13,
+		Exclusive: false,
+		Weight:    41,
 	}
 
 	FirefoxPseudoHeaderOrder = []string{
-		":method",
-		":path",
-		":authority",
-		":scheme",
+		":method", ":path", ":authority", ":scheme",
 	}
 
 	FirefoxHeaderOrder = []string{
-		"host",
-		"user-agent",
-		"accept",
-		"accept-language",
-		"accept-encoding",
-		"referer",
-		"cookie",
-		"pragma",
-		"cache-control",
-		"sec-fetch-dest",
-		"sec-fetch-mode",
-		"sec-fetch-site",
-		"sec-fetch-user",
-		"upgrade-insecure-requests",
+		"host", "user-agent", "accept", "accept-language",
+		"accept-encoding", "referer", "cookie", "pragma",
+		"cache-control", "sec-fetch-dest", "sec-fetch-mode",
+		"sec-fetch-site", "sec-fetch-user", "upgrade-insecure-requests",
+	}
+
+	FirefoxHeaders = map[string]string{
+		"user-agent":                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0",
+		"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+		"accept-language":           "zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2",
+		"upgrade-insecure-requests": "1",
+		"sec-fetch-dest":            "document",
+		"sec-fetch-mode":            "navigate",
+		"sec-fetch-site":            "same-origin",
+		"sec-fetch-user":            "?1",
+	}
+
+	// ─── Safari 17 ───────────────────────────────────────────────────
+
+	SafariSettings = []H2Setting{
+		{ID: H2SettingHeaderTableSize, Val: 65536},
+		{ID: H2SettingEnablePush, Val: 0},
+		{ID: H2SettingInitialWindowSize, Val: 2097152},
+		{ID: H2SettingMaxHeaderListSize, Val: 262144},
+	}
+
+	SafariConnectionFlow = uint32(10485760)
+
+	SafariHeaderPriority = PriorityParam{
+		StreamDep: 0,
+		Exclusive: true,
+		Weight:    254,
+	}
+
+	SafariPseudoHeaderOrder = []string{
+		":method", ":scheme", ":path", ":authority",
+	}
+
+	SafariHeaderOrder = []string{
+		"host", "pragma", "cache-control",
+		"upgrade-insecure-requests", "user-agent", "accept",
+		"sec-fetch-site", "sec-fetch-mode", "sec-fetch-user",
+		"sec-fetch-dest", "referer", "accept-encoding",
+		"accept-language", "cookie",
+	}
+
+	SafariHeaders = map[string]string{
+		"user-agent":                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+		"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		"accept-language":           "zh-CN,zh-Hans;q=0.9",
+		"upgrade-insecure-requests": "1",
+		"sec-fetch-site":            "none",
+		"sec-fetch-mode":            "navigate",
+		"sec-fetch-dest":            "document",
 	}
 )
 
-// orderMap is a lock-free order tracker for header insertion ordering.
-var orderMap sync.Map
-
-// OrderedHeadersRoundTripper intercepts RoundTrip and re-orders
-// HTTP/1.1 request headers to match the browser's canonical order.
-// It also injects the __header_order__ and __pseudo_header_order__
-// keys so that a forked H2 transport can sort headers accordingly.
-// These keys are stripped from the wire by the H2 encoder.
-type OrderedHeadersRoundTripper struct {
-	transport          http.RoundTripper
-	headerOrder        []string
-	pseudoHeaderOrder  []string
-	orderMap           map[string]int
+// BrowserFingerprint returns the full H2 fingerprint for a browser family.
+// Recognize Chrome/Firefox/Safari by profile name prefix.
+func BrowserFingerprint(name string) *H2Fingerprint {
+	lower := strings.ToLower(name)
+	switch {
+	case strings.Contains(lower, "chrome") || strings.Contains(lower, "brave") || strings.Contains(lower, "edge"):
+		return &H2Fingerprint{
+			Settings:          ChromeSettings,
+			InitialStreamID:   3,
+			ConnectionFlow:    ChromeConnectionFlow,
+			HeaderPriority:    ChromeHeaderPriority,
+			PseudoHeaderOrder: ChromePseudoHeaderOrder,
+			HeaderOrder:       ChromeHeaderOrder,
+			Headers:           ChromeHeaders,
+		}
+	case strings.Contains(lower, "firefox"):
+		return &H2Fingerprint{
+			Settings:          FirefoxSettings,
+			InitialStreamID:   1,
+			ConnectionFlow:    FirefoxConnectionFlow,
+			HeaderPriority:    FirefoxHeaderPriority,
+			PriorityFrames:    FirefoxPriorityFrames,
+			PseudoHeaderOrder: FirefoxPseudoHeaderOrder,
+			HeaderOrder:       FirefoxHeaderOrder,
+			Headers:           FirefoxHeaders,
+		}
+	case strings.Contains(lower, "safari"):
+		return &H2Fingerprint{
+			Settings:          SafariSettings,
+			InitialStreamID:   1,
+			ConnectionFlow:    SafariConnectionFlow,
+			HeaderPriority:    SafariHeaderPriority,
+			PseudoHeaderOrder: SafariPseudoHeaderOrder,
+			HeaderOrder:       SafariHeaderOrder,
+			Headers:           SafariHeaders,
+		}
+	case strings.Contains(lower, "opera"):
+		// Opera uses Chrome's H2 fingerprint.
+		fp := BrowserFingerprint("chrome")
+		fp.Headers = map[string]string{
+			"user-agent":                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/91.0.0.0",
+			"accept":                    ChromeHeaders["accept"],
+			"accept-language":           ChromeHeaders["accept-language"],
+			"sec-ch-ua":                 `"Opera";v="91", "Not)A;Brand";v="99"`,
+			"sec-ch-ua-mobile":          "?0",
+			"sec-ch-ua-platform":        `"macOS"`,
+			"upgrade-insecure-requests": "1",
+			"sec-fetch-site":            "none",
+			"sec-fetch-mode":            "navigate",
+			"sec-fetch-user":            "?1",
+			"sec-fetch-dest":            "document",
+		}
+		return fp
+	default:
+		return &H2Fingerprint{
+			Settings:          ChromeSettings,
+			InitialStreamID:   3,
+			ConnectionFlow:    ChromeConnectionFlow,
+			HeaderPriority:    ChromeHeaderPriority,
+			PseudoHeaderOrder: ChromePseudoHeaderOrder,
+			HeaderOrder:       ChromeHeaderOrder,
+			Headers:           ChromeHeaders,
+		}
+	}
 }
 
-// NewOrderedHeadersRoundTripper creates a header-ordering wrapper.
-// headerOrder defines the canonical header ordering. Headers not in
-// the list are appended after the canonical ones.
+// ─── H2 Fingerprint constants (alias for backward compat) ──────────────
+
+var (
+	ChromeH2Settings         = ChromeSettings
+	ChromeH2ConnectionFlow   = ChromeConnectionFlow
+	ChromeH2HeaderPriority   = ChromeHeaderPriority
+	FirefoxH2Settings        = FirefoxSettings
+	FirefoxH2ConnectionFlow  = FirefoxConnectionFlow
+	FirefoxH2PriorityFrames  = FirefoxPriorityFrames
+	FirefoxH2HeaderPriority  = FirefoxHeaderPriority
+	SafariH2Settings         = SafariSettings
+	SafariH2ConnectionFlow   = SafariConnectionFlow
+	SafariH2HeaderPriority   = SafariHeaderPriority
+)
+
+// ─── Header ordering ────────────────────────────────────────────────────
+
+var orderMap sync.Map
+
+type OrderedHeadersRoundTripper struct {
+	transport         http.RoundTripper
+	headerOrder       []string
+	pseudoHeaderOrder []string
+	orderMap          map[string]int
+}
+
 func NewOrderedHeadersRoundTripper(transport http.RoundTripper, headerOrder []string) *OrderedHeadersRoundTripper {
 	return NewOrderedHeadersRoundTripperFull(transport, headerOrder, nil)
 }
 
-// NewOrderedHeadersRoundTripperFull creates a header-ordering wrapper
-// with both regular header order and pseudo-header order.
 func NewOrderedHeadersRoundTripperFull(
 	transport http.RoundTripper,
 	headerOrder, pseudoHeaderOrder []string,
@@ -148,18 +313,12 @@ func NewOrderedHeadersRoundTripperFull(
 	}
 }
 
-// RoundTrip implements http.RoundTripper. It moves headers into the
-// canonical browser order before delegating to the underlying transport.
-// Also injects __header_order__ and __pseudo_header_order__ so that
-// H2-capable transports (forks of x/net/http2) can sort headers on the wire.
 func (o *OrderedHeadersRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Clone and reorder headers.
 	oldHeaders := req.Header.Clone()
 	for k := range req.Header {
 		req.Header.Del(k)
 	}
 
-	// Add headers in canonical order.
 	added := make(map[string]bool)
 	for _, h := range o.headerOrder {
 		vals, ok := oldHeaders[h]
@@ -181,7 +340,6 @@ func (o *OrderedHeadersRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 		added[h] = true
 	}
 
-	// Add any remaining headers not in the canonical order.
 	for k, vals := range oldHeaders {
 		if !added[k] {
 			for _, v := range vals {
@@ -190,10 +348,6 @@ func (o *OrderedHeadersRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 		}
 	}
 
-	// Inject header order keys for H2 transport (req pattern).
-	// When using a standard x/net/http2 transport, these are silently
-	// stripped (they're in the exclude list). When using a forked H2
-	// transport, they control the wire encoding order.
 	if len(o.headerOrder) > 0 {
 		req.Header.Set(header.HeaderOrderKey, strings.Join(o.headerOrder, ","))
 	}
@@ -204,12 +358,10 @@ func (o *OrderedHeadersRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 	return o.transport.RoundTrip(req)
 }
 
-// ─── Multipart boundary (browser-specific) ───────────────────────────────
+// ─── Multipart boundary ─────────────────────────────────────────────────
 
 const webkitFormBoundaryAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789AB"
 
-// ChromeMultipartBoundary generates a Chrome/WebKit-style multipart boundary
-// string. Chrome uses: ----WebKitFormBoundary + 16 random alphanumeric chars.
 func ChromeMultipartBoundary() string {
 	var sb strings.Builder
 	sb.WriteString("----WebKitFormBoundary")
@@ -223,8 +375,6 @@ func ChromeMultipartBoundary() string {
 	return sb.String()
 }
 
-// FirefoxMultipartBoundary generates a Firefox-style multipart boundary.
-// Firefox uses: --------------------------- + 3 groups of 8-digit random numbers.
 func FirefoxMultipartBoundary() string {
 	var sb strings.Builder
 	sb.WriteString("---------------------------")

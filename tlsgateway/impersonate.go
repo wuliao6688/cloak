@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/bogdanfinn/tls-client/profiles"
@@ -110,19 +109,22 @@ func (cb *ChainBuilder) WithH2Fingerprint(fingerprint *H2Fingerprint) *ChainBuil
 func (cb *ChainBuilder) Build() *http.Client {
 	var rt http.RoundTripper = NewHeaderRoundTripper(cb.tr, cb.profile)
 
+	// Get browser fingerprint for header defaults.
+	name := cb.profile.GetClientHelloStr()
+	fp := BrowserFingerprint(name)
+
 	// Apply HTTP/1.1 header ordering if requested.
 	if cb.orderedHdrs {
-		name := cb.profile.GetClientHelloStr()
-		order := ChromeHeaderOrder
-		pseudoOrder := ChromePseudoHeaderOrder
-		if strings.Contains(name, "Firefox") || strings.Contains(name, "firefox") {
-			order = FirefoxHeaderOrder
-			pseudoOrder = FirefoxPseudoHeaderOrder
-		}
-		rt = NewOrderedHeadersRoundTripperFull(rt, order, pseudoOrder)
+		rt = NewOrderedHeadersRoundTripperFull(rt, fp.HeaderOrder, fp.PseudoHeaderOrder)
 	}
 
-	// Apply custom headers if any.
+	// Inject browser default headers (cache-control, sec-fetch-*, etc.)
+	rt = &browserHeadersRoundTripper{
+		inner:   rt,
+		headers: fp.Headers,
+	}
+
+	// Apply custom header overrides on top.
 	if cb.ua != "" || len(cb.headers) > 0 {
 		rt = &customHeaderRoundTripper{
 			inner:   rt,
@@ -132,6 +134,22 @@ func (cb *ChainBuilder) Build() *http.Client {
 	}
 
 	return &http.Client{Transport: rt, Timeout: cb.timeout}
+}
+
+// browserHeadersRoundTripper injects browser-specific default headers
+// (Sec-CH-UA, Accept-Language, etc.) without overriding existing values.
+type browserHeadersRoundTripper struct {
+	inner   http.RoundTripper
+	headers map[string]string
+}
+
+func (b *browserHeadersRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	for k, v := range b.headers {
+		if req.Header.Get(k) == "" {
+			req.Header.Set(k, v)
+		}
+	}
+	return b.inner.RoundTrip(req)
 }
 
 // customHeaderRoundTripper allows overriding specific headers on top
@@ -272,25 +290,17 @@ func trunc(s string, n int) string {
 	return s[:n] + "..."
 }
 
-// forceHTTP1HeaderOrder forces request headers to match Chrome's order.
-// Chrome orders headers: :method, :authority, :scheme, :path
-// then alphabetically for the rest.
-func forceHTTP1HeaderOrder(req *http.Request) {
-	// net/http already handles header ordering in HTTP/1.1 (canonical, then
-	// insertion order). For HTTP/1.1, the wire order follows the canonical
-	// map iteration, which is arbitrary. We can't control it without
-	// replacing the header transport.
-	//
-	// For HTTP/2, pseudo-header order is controlled by the transport.
-	// Currently we use Go's default order. In the future, we should set
-	// PseudoHeaderOrder via golang.org/x/net/http2.Transport (requires
-	// import but no fork).
-}
-
-// forceHTTP2PseudoHeaderOrder sets pseudo-header order on the H2 transport.
-func forceHTTP2PseudoHeaderOrder(order []string) {
-	// golang.org/x/net/http2.Transport doesn't expose PseudoHeaderOrder.
-	// This is a known limitation. If strict H2 fingerprint detection is
-	// needed, a fork of x/net/http2 or use of fhttp is required.
-	_ = order
+// ImpersonateRequest creates a fluent Request builder with browser TLS + HTTP headers.
+// Supports SetSuccessResult/SetErrorResult auto-unmarshal, retry, and dump.
+//
+//	var user User
+//	resp, err := tlsgateway.ImpersonateRequest(profiles.Chrome_150).
+//	    SetSuccessResult(&user).
+//	    SetErrorResult(&apiErr).
+//	    SetRetry(3, tlsgateway.RetryOnServerError, 1*time.Second, 10*time.Second).
+//	    SetDump(tlsgateway.DefaultDumpOptions()).
+//	    Get("https://api.example.com/user")
+func ImpersonateRequest(profile profiles.ClientProfile) *Request {
+	client := Impersonate(profile)
+	return &Request{client: client}
 }
