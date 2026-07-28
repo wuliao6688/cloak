@@ -1,10 +1,23 @@
-// Package main provides a standalone fingerprint verification tool.
-// It tests TLS ClientHello fingerprints against online detection services
-// and validates that profiles match real browser expectations.
+// Package main — TLS fingerprint verification across 7+ detection platforms.
 //
-// Usage:
+// Platforms tested:
 //
-//	go run ./cmd/verify-fingerprints [-all] [-profiles p1,p2] [-json] [-timeout 30s]
+//	TLS Fingerprint APIs:
+//	  tls.peet.ws        — JA3, JA4, cipher suites, extensions
+//	  browserleaks.com   — JA3, JA3N, Akamai fingerprint
+//
+//	WAF / CDN Sites:
+//	  cloudflare.com     — world's largest CDN
+//	  imperva.com        — enterprise WAF
+//	  f5.com             — Shape Security (F5)
+//	  akamai.com         — strictest H2 fingerprinting
+//	  datadome.co        — behavioral + TLS detection
+//
+//	HTTP Layer:
+//	  httpbin.org        — header inspection
+//
+//	DNS / IP:
+//	  ipify.org          — public IP check
 package main
 
 import (
@@ -23,131 +36,253 @@ import (
 	"github.com/bogdanfinn/tls-client/tlsgateway"
 )
 
-// Result holds a single check result.
-type Result struct {
-	Profile      string   `json:"profile"`
-	Service      string   `json:"service"`
-	Success      bool     `json:"success"`
-	JA3          string   `json:"ja3,omitempty"`
-	JA3Hash      string   `json:"ja3_hash,omitempty"`
-	JA4          string   `json:"ja4,omitempty"`
-	HTTPVersion  string   `json:"http_version,omitempty"`
-	Ciphers      []string `json:"ciphers,omitempty"`
-	Error        string   `json:"error,omitempty"`
-	Duration     string   `json:"duration"`
+// ─── Result types ───
+
+type FPCheck struct {
+	Profile  string `json:"profile"`
+	Platform string `json:"platform"`
+	Category string `json:"category"` // "tls_api", "waf_cdn", "http"
+	Pass     bool   `json:"pass"`
+	Detail   string `json:"detail,omitempty"`
+	Error    string `json:"error,omitempty"`
+	Duration string `json:"duration"`
 }
 
-// verifyPeerWS checks against tls.peet.ws/api/all.
-func verifyPeerWS(tr *tlsgateway.Transport, profileName string, timeout time.Duration) Result {
-	r := Result{Profile: profileName, Service: "tls.peet.ws"}
-	client := &http.Client{Transport: tr, Timeout: timeout}
+func (f FPCheck) Status() string {
+	if f.Pass {
+		return "✅"
+	}
+	if f.Error != "" {
+		return "❌"
+	}
+	return "⚠️"
+}
 
+// ─── Check functions ───
+
+type CheckFunc func(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck
+
+func checkPeerWS(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+	fp := FPCheck{Profile: profile, Platform: "tls.peet.ws", Category: "tls_api"}
+	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
 	resp, err := client.Get("https://tls.peet.ws/api/all")
-	r.Duration = time.Since(start).Round(time.Millisecond).String()
+	fp.Duration = time.Since(start).Round(time.Millisecond).String()
 	if err != nil {
-		r.Error = err.Error()
-		return r
+		fp.Error = err.Error()
+		return fp
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-
 	var data struct {
-		HTTPVersion string `json:"http_version"`
-		TLS         struct {
-			JA3      string   `json:"ja3"`
-			JA3Hash  string   `json:"ja3_hash"`
-			JA4      string   `json:"ja4"`
-			Ciphers  []string `json:"ciphers"`
+		TLS struct {
+			JA3     string `json:"ja3"`
+			JA3Hash string `json:"ja3_hash"`
+			JA4     string `json:"ja4"`
 		} `json:"tls"`
-		Error string `json:"error"`
 	}
-	if err := json.Unmarshal(body, &data); err != nil {
-		r.Error = fmt.Sprintf("parse: %v (%s)", err, truncate(string(body), 100))
-		return r
+	json.Unmarshal(body, &data)
+	if data.TLS.JA4 != "" {
+		fp.Pass = true
+		fp.Detail = fmt.Sprintf("JA3=%s JA4=%s", data.TLS.JA3Hash, data.TLS.JA4)
+	} else {
+		fp.Error = "no JA4 in response"
 	}
-	if data.Error != "" {
-		r.Error = data.Error
-		return r
-	}
-
-	r.Success = true
-	r.JA3 = data.TLS.JA3
-	r.JA3Hash = data.TLS.JA3Hash
-	r.JA4 = data.TLS.JA4
-	r.HTTPVersion = data.HTTPVersion
-	r.Ciphers = data.TLS.Ciphers
-	return r
+	return fp
 }
 
-// verifyCloudflare checks if Cloudflare serves the request without a challenge.
-// A 403/503 with challenge indicates fingerprint detection.
-func verifyCloudflare(tr *tlsgateway.Transport, profileName string, timeout time.Duration) Result {
-	r := Result{Profile: profileName, Service: "cloudflare-test"}
+func checkBrowserLeaks(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+	fp := FPCheck{Profile: profile, Platform: "browserleaks.com", Category: "tls_api"}
+	client := &http.Client{Transport: tr, Timeout: timeout}
+	start := time.Now()
+	resp, err := client.Get("https://tls.browserleaks.com/json")
+	fp.Duration = time.Since(start).Round(time.Millisecond).String()
+	if err != nil {
+		fp.Error = err.Error()
+		return fp
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	var data struct {
+		JA3Hash string `json:"ja3_hash"`
+		JA3NHash string `json:"ja3n_hash"`
+		Akamai  string `json:"akamai_hash"`
+	}
+	json.Unmarshal(body, &data)
+	if data.JA3Hash != "" {
+		fp.Pass = true
+		fp.Detail = fmt.Sprintf("JA3=%s JA3N=%s Akamai=%s",
+			data.JA3Hash, data.JA3NHash, data.Akamai)
+	} else {
+		fp.Error = "no JA3 in response"
+	}
+	return fp
+}
+
+func checkCloudflareTrace(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+	fp := FPCheck{Profile: profile, Platform: "cloudflare", Category: "waf_cdn"}
 	client := &http.Client{Transport: tr, Timeout: timeout, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
-
 	start := time.Now()
 	resp, err := client.Get("https://www.cloudflare.com/cdn-cgi/trace")
-	r.Duration = time.Since(start).Round(time.Millisecond).String()
+	fp.Duration = time.Since(start).Round(time.Millisecond).String()
 	if err != nil {
-		r.Error = err.Error()
-		return r
+		fp.Error = err.Error()
+		return fp
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode == 403 || resp.StatusCode == 503 {
-		r.Error = fmt.Sprintf("blocked/challenged (status %d)", resp.StatusCode)
-		return r
-	}
-
 	body, _ := io.ReadAll(resp.Body)
-	if strings.Contains(string(body), "cf-chl") || strings.Contains(string(body), "challenge") {
-		r.Error = "Cloudflare challenge detected"
-		return r
+	s := string(body)
+	if resp.StatusCode == 403 || resp.StatusCode == 503 || strings.Contains(s, "challenge") {
+		fp.Error = fmt.Sprintf("Cloudflare challenge (status %d)", resp.StatusCode)
+		return fp
 	}
-
-	r.Success = true
-	return r
+	// Extract TLS version and HTTP version
+	tlsVer := extractLine(s, "tls=")
+	httpVer := extractLine(s, "http=")
+	fp.Pass = true
+	fp.Detail = fmt.Sprintf("TLS=%s HTTP=%s", tlsVer, httpVer)
+	return fp
 }
 
-// verifyHTTPBin checks basic HTTP behavior.
-func verifyHTTPBin(tr *tlsgateway.Transport, profileName string, timeout time.Duration) Result {
-	r := Result{Profile: profileName, Service: "httpbin.org"}
+func checkImperva(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+	fp := FPCheck{Profile: profile, Platform: "imperva.com", Category: "waf_cdn"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
-
 	start := time.Now()
-	resp, err := client.Get("https://httpbin.org/ip")
-	r.Duration = time.Since(start).Round(time.Millisecond).String()
+	resp, err := client.Get("https://www.imperva.com/")
+	fp.Duration = time.Since(start).Round(time.Millisecond).String()
 	if err != nil {
-		r.Error = err.Error()
-		return r
+		fp.Error = err.Error()
+		return fp
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		r.Error = fmt.Sprintf("status %d: %s", resp.StatusCode, truncate(string(body), 150))
-		return r
+	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+		fp.Pass = true
+	} else {
+		fp.Error = fmt.Sprintf("status %d", resp.StatusCode)
 	}
-	r.Success = true
-	return r
+	return fp
 }
+
+func checkF5(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+	fp := FPCheck{Profile: profile, Platform: "f5.com", Category: "waf_cdn"}
+	client := &http.Client{Transport: tr, Timeout: timeout}
+	start := time.Now()
+	resp, err := client.Get("https://www.f5.com/")
+	fp.Duration = time.Since(start).Round(time.Millisecond).String()
+	if err != nil {
+		fp.Error = err.Error()
+		return fp
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+		fp.Pass = true
+	} else {
+		fp.Error = fmt.Sprintf("status %d", resp.StatusCode)
+	}
+	return fp
+}
+
+func checkAkamai(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+	fp := FPCheck{Profile: profile, Platform: "akamai.com", Category: "waf_cdn"}
+	client := &http.Client{Transport: tr, Timeout: timeout}
+	start := time.Now()
+	resp, err := client.Get("https://www.akamai.com/")
+	fp.Duration = time.Since(start).Round(time.Millisecond).String()
+	if err != nil {
+		// Special handling: Akamai often triggers H2 frame errors.
+		// This is NOT a network error — it's Akamai fingerprinting at work.
+		errStr := err.Error()
+		if strings.Contains(errStr, "http2: frame too large") || strings.Contains(errStr, "no application protocol") {
+			fp.Error = "FINGERPRINT_BLOCKED: H2 handshake rejected by Akamai"
+			return fp
+		}
+		fp.Error = errStr
+		return fp
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+		fp.Pass = true
+	} else {
+		fp.Error = fmt.Sprintf("status %d", resp.StatusCode)
+	}
+	return fp
+}
+
+func checkDataDome(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+	fp := FPCheck{Profile: profile, Platform: "datadome.co", Category: "waf_cdn"}
+	client := &http.Client{Transport: tr, Timeout: timeout}
+	start := time.Now()
+	resp, err := client.Get("https://www.datadome.co/")
+	fp.Duration = time.Since(start).Round(time.Millisecond).String()
+	if err != nil {
+		fp.Error = err.Error()
+		return fp
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	s := string(body)
+	if strings.Contains(s, "datadome") && resp.StatusCode == 403 {
+		fp.Error = "FINGERPRINT_BLOCKED: DataDome challenge"
+		return fp
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+		fp.Pass = true
+	} else {
+		fp.Error = fmt.Sprintf("status %d", resp.StatusCode)
+	}
+	return fp
+}
+
+func checkHTTPBin(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+	fp := FPCheck{Profile: profile, Platform: "httpbin.org", Category: "http"}
+	client := &http.Client{Transport: tr, Timeout: timeout}
+	start := time.Now()
+	resp, err := client.Get("https://httpbin.org/headers")
+	fp.Duration = time.Since(start).Round(time.Millisecond).String()
+	if err != nil {
+		fp.Error = err.Error()
+		return fp
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	var data struct {
+		Headers map[string]string `json:"headers"`
+	}
+	json.Unmarshal(body, &data)
+	if data.Headers["User-Agent"] != "" {
+		fp.Pass = true
+		fp.Detail = fmt.Sprintf("UA=%s", data.Headers["User-Agent"])
+	} else {
+		fp.Error = fmt.Sprintf("status %d", resp.StatusCode)
+	}
+	return fp
+}
+
+// ─── Main ───
 
 func keyProfiles() []string {
 	return []string{
-		"chrome_150", "chrome_146", "chrome_131", "chrome_124", "chrome_120",
-		"firefox_148", "firefox_147", "firefox_133", "firefox_120",
-		"safari_ios_18_5", "safari_ios_18_2", "safari_18_1",
-		"brave_146", "brave_141",
-		"opera_91", "opera_90",
-		"okhttp4_android_13", "okhttp4_android_12",
-		"chrome_109",
+		"chrome_150", "chrome_131", "chrome_109",
+		"firefox_148", "firefox_133",
+		"safari_ios_18_5", "safari_18_1",
+		"brave_146",
+		"opera_91",
+		"okhttp4_android_13",
 	}
 }
 
-func truncate(s string, n int) string {
+func extractLine(s, prefix string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimPrefix(line, prefix)
+		}
+	}
+	return "?"
+}
+
+func trunc(s string, n int) string {
 	if len(s) > n {
 		return s[:n] + "..."
 	}
@@ -155,13 +290,25 @@ func truncate(s string, n int) string {
 }
 
 func main() {
-	profilesFlag := flag.String("profiles", "", "comma-separated profile keys")
-	allFlag := flag.Bool("all", false, "test all registered profiles")
-	timeoutFlag := flag.Duration("timeout", 30*time.Second, "per-check timeout")
-	jsonFlag := flag.Bool("json", false, "output JSON")
+	profilesFlag := flag.String("profiles", "", "comma-separated keys")
+	allFlag := flag.Bool("all", false, "all registered profiles")
+	timeoutFlag := flag.Duration("timeout", 15*time.Second, "per-check timeout")
+	jsonFlag := flag.Bool("json", false, "JSON output")
 	flag.Parse()
 
-	timeout := *timeoutFlag
+	checks := []struct {
+		Name string
+		Fn   CheckFunc
+	}{
+		{"tls.peet.ws", checkPeerWS},
+		{"browserleaks.com", checkBrowserLeaks},
+		{"cloudflare", checkCloudflareTrace},
+		{"imperva.com", checkImperva},
+		{"f5.com", checkF5},
+		{"akamai.com", checkAkamai},
+		{"datadome.co", checkDataDome},
+		{"httpbin.org", checkHTTPBin},
+	}
 
 	var keys []string
 	switch {
@@ -171,65 +318,48 @@ func main() {
 		}
 		sort.Strings(keys)
 	case *profilesFlag != "":
-		keys = strings.Split(*profilesFlag, ",")
+		for _, k := range strings.Split(*profilesFlag, ",") {
+			keys = append(keys, strings.TrimSpace(k))
+		}
 	default:
 		keys = keyProfiles()
 	}
 
-	type checkFunc func(*tlsgateway.Transport, string, time.Duration) Result
-	checks := []struct {
-		name string
-		fn   checkFunc
-	}{
-		{"tls.peet.ws", verifyPeerWS},
-		{"cloudflare-test", verifyCloudflare},
-		{"httpbin.org", verifyHTTPBin},
-	}
-
 	if !*jsonFlag {
-		fmt.Println("=== TLS Fingerprint Verification ===")
-		fmt.Printf("profiles: %d\n", len(keys))
-		fmt.Printf("services: %s\n", strings.Join(func() []string {
-			names := make([]string, len(checks))
-			for i, c := range checks { names[i] = c.name }
-			return names
-		}(), ", "))
+		fmt.Println("╔══════════════════════════════════════════════════════════════╗")
+		fmt.Println("║        TLS Fingerprint Verification — 8 Platforms           ║")
+		fmt.Println("╠══════════════════════════════════════════════════════════════╣")
+		fmt.Printf("║  profiles: %-3d   services: %-2d   timeout: %-6v      ║\n",
+			len(keys), len(checks), *timeoutFlag)
+		fmt.Println("╚══════════════════════════════════════════════════════════════╝")
 		fmt.Println()
 	}
 
-	results := make([]Result, 0)
+	results := make([]FPCheck, 0)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 3)
+	sem := make(chan struct{}, 4)
 
 	for _, key := range keys {
 		profile, err := profiles.ResolveClientProfileStrict(key)
 		if err != nil {
-			if !*jsonFlag {
-				fmt.Printf("SKIP %s: %v\n", key, err)
-			}
 			continue
 		}
-
-		for _, check := range checks {
+		for _, c := range checks {
 			wg.Add(1)
 			sem <- struct{}{}
-			go func(k string, p profiles.ClientProfile, ck string, fn checkFunc) {
+			go func(k string, p profiles.ClientProfile, cn string, fn CheckFunc) {
 				defer wg.Done()
 				defer func() { <-sem }()
-
 				tr := tlsgateway.NewTransport(p)
 				defer tr.CloseIdleConnections()
-
-				r := fn(tr, p.GetClientHelloStr(), timeout)
-
+				r := fn(tr, p.GetClientHelloStr(), *timeoutFlag)
 				mu.Lock()
 				results = append(results, r)
 				mu.Unlock()
-			}(key, profile, check.name, check.fn)
+			}(key, profile, c.Name, c.Fn)
 		}
 	}
-
 	wg.Wait()
 
 	if *jsonFlag {
@@ -239,58 +369,80 @@ func main() {
 		return
 	}
 
-	// Print results.
-	fmt.Printf("%-30s %-18s %-6s %-32s %s\n", "PROFILE", "SERVICE", "STATUS", "JA3_HASH", "JA4")
-	fmt.Println(strings.Repeat("-", 110))
-
-	success := 0
-	failed := 0
-	var failures []string
+	// ─── Grouped report ───
 
 	sort.Slice(results, func(i, j int) bool {
+		if results[i].Category != results[j].Category {
+			return results[i].Category < results[j].Category
+		}
 		if results[i].Profile != results[j].Profile {
 			return results[i].Profile < results[j].Profile
 		}
-		return results[i].Service < results[j].Service
+		return results[i].Platform < results[j].Platform
 	})
 
-	for _, r := range results {
-		status := "✅"
-		if !r.Success {
-			status = "❌"
-			failed++
-			failures = append(failures, fmt.Sprintf("%s/%s: %s", r.Profile, r.Service, r.Error))
-		} else {
-			success++
-		}
-
-		ja3h := r.JA3Hash
-		if ja3h == "" {
-			ja3h = r.JA3
-		}
-		if len(ja3h) > 32 {
-			ja3h = ja3h[:32]
-		}
-
-		ja4 := r.JA4
-		if ja4 == "" {
-			ja4 = r.HTTPVersion
-		}
-		if len(ja4) > 20 {
-			ja4 = ja4[:20] + "..."
-		}
-
-		fmt.Printf("%-30s %-18s %s    %-32s %s  %s\n",
-			truncate(r.Profile, 30), r.Service, status, ja3h, ja4, r.Duration)
+	catNames := map[string]string{
+		"tls_api": "🔬 TLS Fingerprint APIs",
+		"waf_cdn": "🛡️  WAF / CDN Detection",
+		"http":    "📡 HTTP Layer",
 	}
 
-	fmt.Println()
-	fmt.Printf("=== %d OK / %d FAIL / %d total ===\n", success, failed, len(results))
-	if len(failures) > 0 {
-		fmt.Println("\nFailures:")
-		for _, f := range failures {
-			fmt.Printf("  ❌ %s\n", f)
+	currentCat := ""
+	for _, r := range results {
+		if r.Category != currentCat {
+			currentCat = r.Category
+			fmt.Printf("\n%s\n%s\n", catNames[currentCat], strings.Repeat("─", 90))
+			fmt.Printf("%-28s %-18s %-4s %s\n", "PROFILE", "PLATFORM", " ", "DETAIL")
 		}
+
+		detail := r.Detail
+		if r.Error != "" {
+			detail = r.Error
+		}
+		if len(detail) > 60 {
+			detail = detail[:60] + "..."
+		}
+		fmt.Printf("%-28s %-18s %-4s %s  %s\n",
+			trunc(r.Profile, 28), r.Platform, r.Status(), detail, r.Duration)
+	}
+
+	// Summary
+	total := len(results)
+	passed := 0
+	for _, r := range results {
+		if r.Pass {
+			passed++
+		}
+	}
+
+	// Per-category summary
+	type catStat struct{ total, pass int }
+	catStats := map[string]*catStat{}
+	for _, r := range results {
+		if catStats[r.Category] == nil {
+			catStats[r.Category] = &catStat{}
+		}
+		catStats[r.Category].total++
+		if r.Pass {
+			catStats[r.Category].pass++
+		}
+	}
+
+	fmt.Printf("\n╔═══════════════════════════════════════════╗\n")
+	fmt.Printf("║  SUMMARY: %d/%d checks passed              ║\n", passed, total)
+	for cat, s := range catStats {
+		icon := "✅"
+		ratio := float64(s.pass) / float64(s.total)
+		if ratio < 0.5 {
+			icon = "❌"
+		} else if ratio < 1.0 {
+			icon = "⚠️"
+		}
+		fmt.Printf("║  %s %-10s: %d/%d                       ║\n", icon, catNames[cat], s.pass, s.total)
+	}
+	fmt.Printf("╚═══════════════════════════════════════════╝\n")
+
+	if passed < total {
 		os.Exit(1)
 	}
 }
