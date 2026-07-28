@@ -199,6 +199,64 @@ var (
 		"sec-fetch-mode":            "navigate",
 		"sec-fetch-dest":            "document",
 	}
+
+	// ─── Edge (Chromium-based, shares Chrome H2) ─────────────────────
+
+	EdgeHeaders = map[string]string{
+		"user-agent":                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+		"accept":                    ChromeHeaders["accept"],
+		"accept-language":           "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+		"sec-ch-ua":                 `"Not_A Brand";v="8", "Chromium";v="120", "Microsoft Edge";v="120"`,
+		"sec-ch-ua-mobile":          "?0",
+		"sec-ch-ua-platform":        `"Windows"`,
+		"upgrade-insecure-requests": "1",
+		"sec-fetch-site":            "none",
+		"sec-fetch-mode":            "navigate",
+		"sec-fetch-user":            "?1",
+		"sec-fetch-dest":            "document",
+	}
+
+	// ─── QQ 浏览器 (Chromium-based) ──────────────────────────────────
+
+	QQHeaders = map[string]string{
+		"user-agent":                "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.97 Safari/537.36 QQBrowser/13.0.0",
+		"accept":                    ChromeHeaders["accept"],
+		"accept-language":           "zh-CN,zh;q=0.9",
+		"upgrade-insecure-requests": "1",
+		"sec-fetch-site":            "none",
+		"sec-fetch-mode":            "navigate",
+		"sec-fetch-dest":            "document",
+	}
+
+	// ─── 360 浏览器 (Chromium-based) ─────────────────────────────────
+
+	B360Headers = map[string]string{
+		"user-agent":                "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.97 Safari/537.36 360EE",
+		"accept":                    ChromeHeaders["accept"],
+		"accept-language":           "zh-CN,zh;q=0.9",
+		"upgrade-insecure-requests": "1",
+		"sec-fetch-site":            "none",
+		"sec-fetch-mode":            "navigate",
+		"sec-fetch-dest":            "document",
+	}
+
+	// ─── Android (OkHttp-based, matches req's SetTLSFingerprintAndroid) ─────
+
+	AndroidSettings = ChromeSettings // Shares Chromium H2
+
+	AndroidHeaders = map[string]string{
+		"user-agent":      "Dalvik/2.1.0 (Linux; U; Android 13; Pixel 7 Build/TQ1A.221205.011)",
+		"accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+		"accept-language": "zh-CN,zh;q=0.9",
+	}
+
+	// ─── iOS (Safari WebKit-based) ────────────────────────────────────
+
+	IOSHeaders = map[string]string{
+		"user-agent":      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+		"accept":          SafariHeaders["accept"],
+		"accept-language": "zh-CN,zh-Hans;q=0.9",
+	}
 )
 
 // BrowserFingerprint returns the full H2 fingerprint for a browser family.
@@ -206,7 +264,7 @@ var (
 func BrowserFingerprint(name string) *H2Fingerprint {
 	lower := strings.ToLower(name)
 	switch {
-	case strings.Contains(lower, "chrome") || strings.Contains(lower, "brave") || strings.Contains(lower, "edge"):
+	case strings.Contains(lower, "chrome") || strings.Contains(lower, "brave"):
 		return &H2Fingerprint{
 			Settings:          ChromeSettings,
 			InitialStreamID:   3,
@@ -254,6 +312,56 @@ func BrowserFingerprint(name string) *H2Fingerprint {
 			"sec-fetch-dest":            "document",
 		}
 		return fp
+	case strings.Contains(lower, "qq"):
+		return &H2Fingerprint{
+			Settings:          ChromeSettings,
+			InitialStreamID:   3,
+			ConnectionFlow:    ChromeConnectionFlow,
+			HeaderPriority:    ChromeHeaderPriority,
+			PseudoHeaderOrder: ChromePseudoHeaderOrder,
+			HeaderOrder:       ChromeHeaderOrder,
+			Headers:           QQHeaders,
+		}
+	case strings.Contains(lower, "360"):
+		return &H2Fingerprint{
+			Settings:          ChromeSettings,
+			InitialStreamID:   3,
+			ConnectionFlow:    ChromeConnectionFlow,
+			HeaderPriority:    ChromeHeaderPriority,
+			PseudoHeaderOrder: ChromePseudoHeaderOrder,
+			HeaderOrder:       ChromeHeaderOrder,
+			Headers:           B360Headers,
+		}
+	case strings.Contains(lower, "ios"):
+		return &H2Fingerprint{
+			Settings:          SafariSettings,
+			InitialStreamID:   1,
+			ConnectionFlow:    SafariConnectionFlow,
+			HeaderPriority:    SafariHeaderPriority,
+			PseudoHeaderOrder: SafariPseudoHeaderOrder,
+			HeaderOrder:       SafariHeaderOrder,
+			Headers:           IOSHeaders,
+		}
+	case strings.Contains(lower, "android") || strings.Contains(lower, "okhttp"):
+		return &H2Fingerprint{
+			Settings:          AndroidSettings,
+			InitialStreamID:   3,
+			ConnectionFlow:    ChromeConnectionFlow,
+			HeaderPriority:    ChromeHeaderPriority,
+			PseudoHeaderOrder: ChromePseudoHeaderOrder,
+			HeaderOrder:       ChromeHeaderOrder,
+			Headers:           AndroidHeaders,
+		}
+	case strings.Contains(lower, "edge"):
+		return &H2Fingerprint{
+			Settings:          ChromeSettings,
+			InitialStreamID:   3,
+			ConnectionFlow:    ChromeConnectionFlow,
+			HeaderPriority:    ChromeHeaderPriority,
+			PseudoHeaderOrder: ChromePseudoHeaderOrder,
+			HeaderOrder:       ChromeHeaderOrder,
+			Headers:           EdgeHeaders,
+		}
 	default:
 		return &H2Fingerprint{
 			Settings:          ChromeSettings,
@@ -265,6 +373,20 @@ func BrowserFingerprint(name string) *H2Fingerprint {
 			Headers:           ChromeHeaders,
 		}
 	}
+}
+
+// RandomFingerprint returns a randomly selected browser fingerprint.
+// Equivalent to req's SetTLSFingerprintRandomized.
+func RandomFingerprint() *H2Fingerprint {
+	browsers := []func() *H2Fingerprint{
+		func() *H2Fingerprint { return BrowserFingerprint("chrome") },
+		func() *H2Fingerprint { return BrowserFingerprint("firefox") },
+		func() *H2Fingerprint { return BrowserFingerprint("safari") },
+		func() *H2Fingerprint { return BrowserFingerprint("edge") },
+	}
+	var b [1]byte
+	rand.Read(b[:])
+	return browsers[int(b[0])%len(browsers)]()
 }
 
 // ─── H2 Fingerprint constants (alias for backward compat) ──────────────

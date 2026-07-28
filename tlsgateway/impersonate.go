@@ -105,6 +105,66 @@ func (cb *ChainBuilder) WithH2Fingerprint(fingerprint *H2Fingerprint) *ChainBuil
 	return cb
 }
 
+// SetH2Fingerprint sets a custom H2 fingerprint.
+func (cb *ChainBuilder) SetH2Fingerprint(fp *H2Fingerprint) *ChainBuilder {
+	cb.h2Fingerprint = fp
+	return cb
+}
+
+// AsChrome sets the full Chrome browser fingerprint.
+func (cb *ChainBuilder) AsChrome() *ChainBuilder {
+	cb.h2Fingerprint = BrowserFingerprint("chrome")
+	return cb
+}
+
+// AsFirefox sets the full Firefox browser fingerprint.
+func (cb *ChainBuilder) AsFirefox() *ChainBuilder {
+	cb.h2Fingerprint = BrowserFingerprint("firefox")
+	return cb
+}
+
+// AsSafari sets the full Safari browser fingerprint.
+func (cb *ChainBuilder) AsSafari() *ChainBuilder {
+	cb.h2Fingerprint = BrowserFingerprint("safari")
+	return cb
+}
+
+// AsEdge sets the full Edge browser fingerprint.
+func (cb *ChainBuilder) AsEdge() *ChainBuilder {
+	cb.h2Fingerprint = BrowserFingerprint("edge")
+	return cb
+}
+
+// AsQQ sets the QQ 浏览器 fingerprint.
+func (cb *ChainBuilder) AsQQ() *ChainBuilder {
+	cb.h2Fingerprint = BrowserFingerprint("qq")
+	return cb
+}
+
+// As360 sets the 360 浏览器 fingerprint.
+func (cb *ChainBuilder) As360() *ChainBuilder {
+	cb.h2Fingerprint = BrowserFingerprint("360")
+	return cb
+}
+
+// AsIOS sets the iOS fingerprint.
+func (cb *ChainBuilder) AsIOS() *ChainBuilder {
+	cb.h2Fingerprint = BrowserFingerprint("ios")
+	return cb
+}
+
+// AsAndroid sets the Android fingerprint.
+func (cb *ChainBuilder) AsAndroid() *ChainBuilder {
+	cb.h2Fingerprint = BrowserFingerprint("android")
+	return cb
+}
+
+// AsRandom sets a randomly selected browser fingerprint.
+func (cb *ChainBuilder) AsRandom() *ChainBuilder {
+	cb.h2Fingerprint = RandomFingerprint()
+	return cb
+}
+
 // Build creates the impersonated http.Client.
 func (cb *ChainBuilder) Build() *http.Client {
 	var rt http.RoundTripper = NewHeaderRoundTripper(cb.tr, cb.profile)
