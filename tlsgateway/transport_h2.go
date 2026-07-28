@@ -53,6 +53,11 @@ type Transport struct {
 	// decisions are logged.
 	debugWriter io.Writer
 	debugLog   *log.Logger
+
+	// browserHeaders are injected into every request RoundTrip.
+	// Populated from BrowserFingerprint at NewTransport time.
+	// Makes Transport self-contained — no external HeaderRoundTripper needed.
+	browserHeaders map[string]string
 }
 
 var _ http.RoundTripper = (*Transport)(nil)
@@ -79,6 +84,11 @@ func NewTransportWithOptions(profile profiles.ClientProfile, opts TransportOptio
 		serverNameOverwrite:  opts.ServerNameOverwrite,
 		insecureSkipVerify:   opts.InsecureSkipVerify,
 		debugLog:             log.New(io.Discard, "", 0),
+	}
+
+	// Inject browser headers (req-style: Transport = TLS + HTTP in one object).
+	if fp := BrowserFingerprint(profile.GetClientHelloStr()); fp != nil {
+		t.browserHeaders = fp.Headers
 	}
 
 	// Plain HTTP (no TLS).
@@ -143,6 +153,13 @@ func (t *Transport) SetRandomExtensionOrder(enabled bool) {
 //  3. If H2 probe succeeds → future requests use H2.
 //  4. If H2 fails with protocol error → mark host disabled, use H1.1.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Inject browser headers (req-style: one object, everything built-in).
+	for k, v := range t.browserHeaders {
+		if req.Header.Get(k) == "" {
+			req.Header.Set(k, v)
+		}
+	}
+
 	if req.URL.Scheme != "https" {
 		return t.h1p.RoundTrip(req)
 	}

@@ -167,21 +167,15 @@ func (cb *ChainBuilder) AsRandom() *ChainBuilder {
 
 // Build creates the impersonated http.Client.
 func (cb *ChainBuilder) Build() *http.Client {
-	var rt http.RoundTripper = NewHeaderRoundTripper(cb.tr, cb.profile)
+	var rt http.RoundTripper = cb.tr // Transport already injects browser headers
 
-	// Get browser fingerprint for header defaults.
+	// Get browser fingerprint for header ordering.
 	name := cb.profile.GetClientHelloStr()
 	fp := BrowserFingerprint(name)
 
 	// Apply HTTP/1.1 header ordering if requested.
 	if cb.orderedHdrs {
 		rt = NewOrderedHeadersRoundTripperFull(rt, fp.HeaderOrder, fp.PseudoHeaderOrder)
-	}
-
-	// Inject browser default headers (cache-control, sec-fetch-*, etc.)
-	rt = &browserHeadersRoundTripper{
-		inner:   rt,
-		headers: fp.Headers,
 	}
 
 	// Apply custom header overrides on top.
@@ -195,22 +189,8 @@ func (cb *ChainBuilder) Build() *http.Client {
 
 	return &http.Client{Transport: rt, Timeout: cb.timeout}
 }
-
-// browserHeadersRoundTripper injects browser-specific default headers
-// (Sec-CH-UA, Accept-Language, etc.) without overriding existing values.
-type browserHeadersRoundTripper struct {
-	inner   http.RoundTripper
-	headers map[string]string
-}
-
-func (b *browserHeadersRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	for k, v := range b.headers {
-		if req.Header.Get(k) == "" {
-			req.Header.Set(k, v)
-		}
-	}
-	return b.inner.RoundTrip(req)
-}
+// browserHeadersRoundTripper is removed — Transport now injects headers directly.
+// This matches req's architecture: one object, everything built-in.
 
 // customHeaderRoundTripper allows overriding specific headers on top
 // of the profile-based defaults from HeaderRoundTripper.
