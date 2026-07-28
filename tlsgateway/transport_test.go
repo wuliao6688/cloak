@@ -1,6 +1,7 @@
 package tlsgateway
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,16 +11,34 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/http2"
+
 	"github.com/bogdanfinn/tls-client/profiles"
 )
 
-// startLocalTLSServer starts a local HTTPS test server with a self-signed cert.
+// startLocalTLSServer starts an HTTPS test server with HTTP/2 support.
+// HTTP/2 is essential for concurrent request tests — without it, 20
+// goroutines hitting a single H1.1 connection overwhelm its connection pool.
 func startLocalTLSServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		fmt.Fprintf(w, "OK %s %s", r.Proto, r.URL.Path)
 	}))
+
+	// Enable HTTP/2 on the test server.
+	// httptest.NewTLSServer does NOT configure H2 by default.
+	if err := http2.ConfigureServer(srv.Config, nil); err != nil {
+		t.Fatalf("http2.ConfigureServer: %v", err)
+	}
+
+	// Ensure TLS config advertises H2 via ALPN.
+	srv.TLS = &tls.Config{
+		NextProtos: []string{"h2", "http/1.1"},
+	}
+
+	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	return srv
 }
