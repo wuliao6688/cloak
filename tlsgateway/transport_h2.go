@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -24,11 +26,6 @@ import (
 //   - HTTPS → HTTP/2 (x/net/http2 + uTLS)
 //   - If server doesn't support H2 → automatic fallback to HTTP/1.1 over TLS
 //   - HTTP  → HTTP/1.1 (net/http)
-//
-// Build-tag extensions (opt-in only):
-//
-//	go build -tags h3     → adds HTTP/3 support
-//	go build -tags fhttp  → adds Akamai-level H2 SETTINGS customization
 type Transport struct {
 	h2  *http2.Transport // primary: HTTPS with HTTP/2
 	h1  *http.Transport   // fallback: HTTP/1.1 over TLS
@@ -51,6 +48,11 @@ type Transport struct {
 	// and half get "connection force closed" since the H2
 	// transport tears down connections during failure.
 	h2ProbeMu sync.Map // map[string]*sync.Mutex
+
+	// Debug (optional). When set, TLS handshake and transport
+	// decisions are logged.
+	debugWriter io.Writer
+	debugLog   *log.Logger
 }
 
 var _ http.RoundTripper = (*Transport)(nil)
@@ -76,6 +78,7 @@ func NewTransportWithOptions(profile profiles.ClientProfile, opts TransportOptio
 		randomExtensionOrder: opts.RandomExtensionOrder,
 		serverNameOverwrite:  opts.ServerNameOverwrite,
 		insecureSkipVerify:   opts.InsecureSkipVerify,
+		debugLog:             log.New(io.Discard, "", 0),
 	}
 
 	// Plain HTTP (no TLS).
@@ -148,6 +151,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// Fast path: host is known to lack H2.
 	if _, disabled := t.h2Disabled.Load(host); disabled {
+		t.debugf("%s → H1 (cached)", host)
 		return t.h1.RoundTrip(req)
 	}
 
@@ -159,17 +163,20 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// Double-check: another goroutine may have probed while we waited.
 	if _, disabled := t.h2Disabled.Load(host); disabled {
+		t.debugf("%s → H1 (double-check)", host)
 		return t.h1.RoundTrip(req)
 	}
 
 	// Probe H2.
 	resp, err := t.h2.RoundTrip(req)
 	if err == nil {
+		t.debugf("%s → H2 OK", host)
 		return resp, nil
 	}
 
 	// H2 failed — check if server doesn't support it.
 	if isProtocolError(err) {
+		t.debugf("%s → H2 failed (%v), fallback to H1", host, err)
 		t.h2Disabled.Store(host, true)
 		return t.h1.RoundTrip(req)
 	}
@@ -199,18 +206,12 @@ func isProtocolError(err error) bool {
 	msg := err.Error()
 	switch {
 	case contains(msg, "http2: frame too large"):
-		// Server returned something that isn't valid HTTP/2.
-		// Could be an HTTP/1.1 response, a challenge page, or a plain
-		// connection close. Treat as "host doesn't speak H2".
 		return true
 	case contains(msg, "unexpected ALPN"):
 		return true
 	case contains(msg, "TLS handshake") && contains(msg, "no application protocol"):
 		return true
 	case contains(msg, "client conn could not be established"):
-		// H2 transport couldn't establish the connection — likely
-		// TLS negotiation failed for H2 specifically. Treat as
-		// "host doesn't support H2" to avoid repeated probe failures.
 		return true
 	}
 	return false
@@ -291,11 +292,15 @@ func (t *Transport) dialTLSWithH1(ctx context.Context, network, addr string, for
 
 	clientHelloID := profile.GetClientHelloId()
 
+	t.debugf("%s → dial TLS profile=%s forceH1=%v", addr, profile.GetClientHelloStr(), forceH1)
+
 	uconn := utls.UClient(rawConn, utlsConfig, clientHelloID, randomOrder, forceH1, false)
 	if err := uconn.HandshakeContext(ctx); err != nil {
 		uconn.Close()
+		t.debugf("%s → handshake FAIL: %v", addr, err)
 		return nil, fmt.Errorf("tlsgateway: handshake: %w", err)
 	}
+	t.debugf("%s → handshake OK negotiated=%s", addr, uconn.ConnectionState().NegotiatedProtocol)
 	return uconn, nil
 }
 

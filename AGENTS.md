@@ -13,10 +13,37 @@
 
 | 文件 | 职责 |
 |------|------|
-| `transport_h2.go` | Transport: H2 + H1.1 自动降级 (zero fork) |
-| `transport_race.go` | RaceTransport: H2 vs H1.1 Protocol Racing (zero fork) |
-| `header.go` | HeaderRoundTripper: 按画像注入浏览器 UA/Accept 等头 |
+| `transport_h2.go` | Transport: H2 + H1.1 自动降级 + Debug |
+| `transport_race.go` | RaceTransport: H2 vs H1.1 Protocol Racing |
+| `impersonate.go` | Impersonate/ImpersonateChain/SelfCheck/DumpFingerprint |
+| `header.go` | HeaderRoundTripper: 按画像注入浏览器 UA/Accept |
+| `middleware.go` | TransportMiddleware: 链式包装 Debug/UA/Tracing |
 | `proxy.go` | HTTP/HTTPS 正向代理 (CONNECT 隧道) |
+
+### 快速使用
+
+```go
+// 一行代码伪装浏览器
+client := tlsgateway.Impersonate(profiles.Chrome_150)
+resp, _ := client.Get("https://www.akamai.com/")
+
+// 链式 API
+client := tlsgateway.ImpersonateChain(profiles.Firefox_148).
+    SetDebug(os.Stderr).
+    SetTimeout(10 * time.Second).
+    Build()
+
+// 指纹自检
+info, _ := tlsgateway.SelfCheck(profiles.Chrome_150)
+fmt.Printf("JA3: %s  JA4: %s\n", info.JA3Hash, info.JA4)
+
+// TransportMiddleware
+tr := tlsgateway.NewTransport(p)
+wrapped := tr.Wrap(
+    tlsgateway.DebugMiddleware(logf),
+    tlsgateway.UserAgentMiddleware("custom/1.0"),
+)
+```
 
 ## profiles — 共享画像层
 
