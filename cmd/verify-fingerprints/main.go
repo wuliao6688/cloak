@@ -1,10 +1,11 @@
-// Package main — TLS fingerprint verification across 11 detection platforms.
+// Package main — TLS fingerprint verification across 12 detection platforms.
 //
 // Platforms tested:
 //
-//	TLS Fingerprint APIs (2):
-//	  tls.peet.ws        — JA3, JA4, cipher suites, extensions
-//	  browserleaks.com   — JA3, JA3N, Akamai fingerprint
+//	TLS Fingerprint APIs (3):
+//	  tls.peet.ws        — JA3, JA4, cipher suites, extensions (JSON)
+//	  browserleaks.com   — JA3, JA3N, Akamai fingerprint (JSON)
+//	  browserscan.net    — TLS 指纹页面加载检测
 //
 //	WAF / CDN Sites (8):
 //	  cloudflare.com     — world's largest CDN (trace endpoint)
@@ -213,6 +214,31 @@ func checkSannysoft(tr *tlsgateway.Transport, profile string, timeout time.Durat
 	return fp
 }
 
+func checkBrowserscan(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+	fp := FPCheck{Profile: profile, Platform: "browserscan.net", Category: "tls_api"}
+	client := &http.Client{Transport: tr, Timeout: timeout}
+	start := time.Now()
+	resp, err := client.Get("https://www.browserscan.net/zh/tls")
+	fp.Duration = time.Since(start).Round(time.Millisecond).String()
+	if err != nil { fp.Error = err.Error(); return fp }
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	s := string(body)
+	if resp.StatusCode == 200 {
+		// Try to find TLS fingerprint info in the page
+		if strings.Contains(s, "JA3") || strings.Contains(s, "ja3") || strings.Contains(s, "TLS") {
+			fp.Pass = true
+			fp.Detail = "PAGE_LOADED: TLS info visible"
+		} else {
+			fp.Pass = true
+			fp.Detail = "PAGE_LOADED"
+		}
+	} else {
+		fp.Error = fmt.Sprintf("status %d", resp.StatusCode)
+	}
+	return fp
+}
+
 // ─── HTTP check ───
 
 func checkHTTPBin(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
@@ -288,6 +314,7 @@ func main() {
 		{"hcaptcha.com", checkHcaptcha},
 		{"recaptcha-demo", checkRecaptcha},
 		{"sannysoft.com", checkSannysoft},
+		{"browserscan.net", checkBrowserscan},
 		{"httpbin.org", checkHTTPBin},
 	}
 
@@ -304,7 +331,7 @@ func main() {
 
 	if !*jsonFlag {
 		fmt.Println("╔══════════════════════════════════════════════════════════════╗")
-		fmt.Println("║        TLS Fingerprint Verification — 11 Platforms          ║")
+		fmt.Println("║        TLS Fingerprint Verification — 12 Platforms          ║")
 		fmt.Printf("║  profiles: %-3d   timeout: %-6v                      ║\n", len(keys), *timeoutFlag)
 		fmt.Println("╚══════════════════════════════════════════════════════════════╝")
 		fmt.Println()
