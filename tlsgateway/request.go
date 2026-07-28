@@ -28,6 +28,11 @@ type Request struct {
 	retryInterval  GetRetryIntervalFunc
 
 	queryParams map[string]string
+
+	commonHeaders      map[string]string // per-request default headers (req: SetCommonHeaders)
+	commonQueryParams  map[string]string // per-request default query params
+	onRequest          []func(*http.Request) error  // req: RequestMiddleware
+	onResponse         []func(*Response) error      // req: ResponseMiddleware
 	baseURL     string
 	outputFile  string
 	output      io.Writer
@@ -73,6 +78,34 @@ func (r *Request) SetQueryParam(key, value string) *Request {
 // SetQueryParams sets multiple query parameters.
 func (r *Request) SetQueryParams(params map[string]string) *Request {
 	for k, v := range params { r.SetQueryParam(k, v) }
+	return r
+}
+
+// SetCommonQueryParams sets query params applied to all requests from this builder.
+func (r *Request) SetCommonQueryParams(params map[string]string) *Request {
+	if r.commonQueryParams == nil { r.commonQueryParams = make(map[string]string) }
+	for k, v := range params { r.commonQueryParams[k] = v }
+	return r
+}
+
+// SetCommonHeaders sets headers applied to all requests from this builder.
+func (r *Request) SetCommonHeaders(headers map[string]string) *Request {
+	if r.commonHeaders == nil { r.commonHeaders = make(map[string]string) }
+	for k, v := range headers { r.commonHeaders[k] = v }
+	return r
+}
+
+// OnRequest registers a callback that runs before the request is sent.
+// Equivalent to req's RequestMiddleware.
+func (r *Request) OnRequest(fn func(req *http.Request) error) *Request {
+	r.onRequest = append(r.onRequest, fn)
+	return r
+}
+
+// OnResponse registers a callback that runs after the response is received.
+// Equivalent to req's ResponseMiddleware.
+func (r *Request) OnResponse(fn func(resp *Response) error) *Request {
+	r.onResponse = append(r.onResponse, fn)
 	return r
 }
 
@@ -130,10 +163,13 @@ func (r *Request) buildURL() string {
 	if r.baseURL != "" && !strings.HasPrefix(u, "http") {
 		u = strings.TrimRight(r.baseURL, "/") + "/" + strings.TrimLeft(u, "/")
 	}
-	if len(r.queryParams) > 0 {
+	allParams := make(map[string]string)
+	for k, v := range r.commonQueryParams { allParams[k] = v }
+	for k, v := range r.queryParams { allParams[k] = v }
+	if len(allParams) > 0 {
 		sep := "?"
 		if strings.Contains(u, "?") { sep = "&" }
-		for k, v := range r.queryParams {
+		for k, v := range allParams {
 			u += sep + url.QueryEscape(k) + "=" + url.QueryEscape(v)
 			sep = "&"
 		}
@@ -193,8 +229,20 @@ func (r *Request) execute() (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Apply common headers first, then per-request overrides (req: SetCommonHeaders + SetHeader).
+	for k, v := range r.commonHeaders {
+		req.Header.Set(k, v)
+	}
 	for k, v := range r.headers {
 		req.Header.Set(k, v)
+	}
+
+	// Run request hooks (req: RequestMiddleware).
+	for _, fn := range r.onRequest {
+		if err := fn(req); err != nil {
+			return nil, err
+		}
 	}
 
 	ti := newTraceInfo()
@@ -222,6 +270,13 @@ func (r *Request) execute() (*Response, error) {
 	}
 
 	resp.autoUnmarshal()
+
+	// Run response hooks (req: ResponseMiddleware).
+	for _, fn := range r.onResponse {
+		if err := fn(resp); err != nil {
+			return resp, err
+		}
+	}
 
 	// Save to file if requested.
 	if r.outputFile != "" {

@@ -8,7 +8,16 @@ import (
 	"time"
 )
 
-// Response wraps *http.Response with auto-unmarshal and trace info.
+// ResultState represents the outcome of a request.
+type ResultState int
+
+const (
+	ResultUnknown ResultState = iota
+	ResultSuccess              // 2xx
+	ResultError                // non-2xx or transport error
+)
+
+// Response wraps *http.Response with auto-unmarshal support.
 type Response struct {
 	*http.Response
 
@@ -100,6 +109,17 @@ func (r *Response) autoUnmarshal() {
 // IsSuccess returns true for 2xx status codes.
 func (r *Response) IsSuccess() bool {
 	return r.StatusCode >= 200 && r.StatusCode < 300
+}
+
+// IsError returns true for non-2xx status codes.
+func (r *Response) IsError() bool { return !r.IsSuccess() }
+
+// ResultState returns the classification (req: ResultState).
+func (r *Response) ResultState() ResultState {
+	if r.unmarshalErr != nil { return ResultError }
+	if r.Response == nil { return ResultError }
+	if r.IsSuccess() { return ResultSuccess }
+	return ResultError
 }
 
 // SuccessResult returns the auto-unmarshalled success body.
