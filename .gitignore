@@ -15,3 +15,4 @@ cffi_dist/tls_client_cffi
 *.dylib
 *.so
 fingerprint_verification_report.json
+verify-fingerprints
