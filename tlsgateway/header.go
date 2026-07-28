@@ -50,14 +50,26 @@ func browserHeaders(profile profiles.ClientProfile) map[string]string {
 		"Cache-Control":   "max-age=0",
 	}
 
-	// Chrome family
+	// Chrome family (Chrome, Brave, Edge — direct version)
 	if strings.Contains(name, "Chrome") || strings.Contains(name, "chrome") ||
 		strings.Contains(name, "Brave") || strings.Contains(name, "brave") ||
-		strings.Contains(name, "Opera") || strings.Contains(name, "opera") ||
 		strings.Contains(name, "Edge") || strings.Contains(name, "edge") {
 		ver := extractVersion(name)
 		h["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + ver + ".0.0.0 Safari/537.36"
 		h["Sec-Ch-Ua"] = `"Chromium";v="` + ver + `", "Google Chrome";v="` + ver + `"`
+		h["Sec-Ch-Ua-Platform"] = `"Windows"`
+		h["Sec-Ch-Ua-Mobile"] = "?0"
+		return h
+	}
+
+	// Opera: version is Opera's own numbering, Chrome engine = Opera + 18.
+	// Opera 91 → Chrome 109, Opera 90 → Chrome 108, etc.
+	if strings.Contains(name, "Opera") || strings.Contains(name, "opera") {
+		operaVer := extractVersion(name)
+		operaNum := atoi(operaVer)
+		chromeVer := fmtVer(operaNum + 18)
+		h["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + chromeVer + ".0.0.0 Safari/537.36 OPR/" + operaVer + ".0.0.0"
+		h["Sec-Ch-Ua"] = `"Chromium";v="` + chromeVer + `", "Not_A Brand";v="24", "Opera";v="` + operaVer + `"`
 		h["Sec-Ch-Ua-Platform"] = `"Windows"`
 		h["Sec-Ch-Ua-Mobile"] = "?0"
 		return h
@@ -97,4 +109,29 @@ func extractVersion(name string) string {
 		}
 	}
 	return "150"
+}
+
+// atoi parses an integer from a string, returning 0 on error.
+func atoi(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			break
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+// fmtVer formats a version number as a string.
+func fmtVer(v int) string {
+	if v <= 0 {
+		return "150"
+	}
+	result := ""
+	for v > 0 {
+		result = string(rune('0'+v%10)) + result
+		v /= 10
+	}
+	return result
 }
