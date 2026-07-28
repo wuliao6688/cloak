@@ -97,9 +97,12 @@ func NewTransportWithOptions(profile profiles.ClientProfile, opts TransportOptio
 	}
 
 	// HTTPS fallback to HTTP/1.1 (when server doesn't support H2).
+	// Uses a SEPARATE dialer that forces HTTP/1.1 ALPN — without this,
+	// the H2 ALPN advertised by the uTLS profile would cause the server
+	// to send H2 frames that H1 can't parse, breaking the fallback.
 	t.h1 = &http.Transport{
 		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return t.dialTLS(ctx, network, addr)
+			return t.dialTLSH1(ctx, network, addr)
 		},
 		ForceAttemptHTTP2:     false,
 		TLSNextProto:          make(map[string]func(string, *tls.Conn) http.RoundTripper),
@@ -195,7 +198,10 @@ func isProtocolError(err error) bool {
 	}
 	msg := err.Error()
 	switch {
-	case contains(msg, "http2: frame too large") && contains(msg, "HTTP/1.1"):
+	case contains(msg, "http2: frame too large"):
+		// Server returned something that isn't valid HTTP/2.
+		// Could be an HTTP/1.1 response, a challenge page, or a plain
+		// connection close. Treat as "host doesn't speak H2".
 		return true
 	case contains(msg, "unexpected ALPN"):
 		return true
@@ -242,6 +248,18 @@ func (t *Transport) DialTLS(ctx context.Context, network, addr string) (net.Conn
 }
 
 func (t *Transport) dialTLS(ctx context.Context, network, addr string) (net.Conn, error) {
+	return t.dialTLSWithH1(ctx, network, addr, false)
+}
+
+// dialTLSH1 is like dialTLS but forces HTTP/1.1 ALPN (no "h2").
+// Used by the H1 fallback transport to avoid the server sending H2
+// frames to an H1.1 client. Without this, Akamai and similar CDNs
+// detect the ALPN mismatch and block the connection.
+func (t *Transport) dialTLSH1(ctx context.Context, network, addr string) (net.Conn, error) {
+	return t.dialTLSWithH1(ctx, network, addr, true)
+}
+
+func (t *Transport) dialTLSWithH1(ctx context.Context, network, addr string, forceH1 bool) (net.Conn, error) {
 	t.profileMu.RLock()
 	profile := t.profile
 	randomOrder := t.randomExtensionOrder
@@ -273,7 +291,7 @@ func (t *Transport) dialTLS(ctx context.Context, network, addr string) (net.Conn
 
 	clientHelloID := profile.GetClientHelloId()
 
-	uconn := utls.UClient(rawConn, utlsConfig, clientHelloID, randomOrder, false, false)
+	uconn := utls.UClient(rawConn, utlsConfig, clientHelloID, randomOrder, forceH1, false)
 	if err := uconn.HandshakeContext(ctx); err != nil {
 		uconn.Close()
 		return nil, fmt.Errorf("tlsgateway: handshake: %w", err)

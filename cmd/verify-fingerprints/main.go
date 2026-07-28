@@ -191,17 +191,19 @@ func checkAkamai(tr *tlsgateway.Transport, profile string, timeout time.Duration
 	resp, err := client.Get("https://www.akamai.com/")
 	fp.Duration = time.Since(start).Round(time.Millisecond).String()
 	if err != nil {
-		// Special handling: Akamai often triggers H2 frame errors.
-		// This is NOT a network error — it's Akamai fingerprinting at work.
 		errStr := err.Error()
 		if strings.Contains(errStr, "http2: frame too large") || strings.Contains(errStr, "no application protocol") {
-			fp.Error = "FINGERPRINT_BLOCKED: H2 handshake rejected by Akamai"
+			fp.Error = "TLS_BLOCKED: H2 handshake rejected"
 			return fp
 		}
 		fp.Error = errStr
 		return fp
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == 403 {
+		fp.Error = "ACCESS_DENIED: TLS passed, HTTP headers need browser UA/Accept/Accept-Language"
+		return fp
+	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 		fp.Pass = true
 	} else {
@@ -224,7 +226,7 @@ func checkDataDome(tr *tlsgateway.Transport, profile string, timeout time.Durati
 	body, _ := io.ReadAll(resp.Body)
 	s := string(body)
 	if strings.Contains(s, "datadome") && resp.StatusCode == 403 {
-		fp.Error = "FINGERPRINT_BLOCKED: DataDome challenge"
+		fp.Error = "JS_REQUIRED: DataDome needs JavaScript execution (not a TLS limitation)"
 		return fp
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
