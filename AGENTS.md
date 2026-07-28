@@ -128,3 +128,91 @@ go test -race -count=1 -run '^TestStress' -timeout 120s .           # 高并发
 - map/slice/pointer 字段的 Getter 返回防御性副本
 - 不在锁内执行网络 I/O 或关闭连接
 - 画像注册表读写使用独立锁，避免锁升级/递归
+
+## 指纹验证 — 全平台人机检测 (强制质量门禁)
+
+**任何画像新增/修改/版本升级后，必须运行全平台验证并通过以下门槛。**
+
+### 验证命令
+
+```bash
+# 关键画像快速验证（每次改画像必跑）
+go run ./cmd/verify-fingerprints -profiles "chrome_150,firefox_148,safari_ios_18_5"
+
+# 全量 81 画像验证（发版前必跑）
+go run ./cmd/verify-fingerprints -all
+
+# JSON 输出存档
+go run ./cmd/verify-fingerprints -all -json > fingerprints_$(date +%Y%m%d).json
+```
+
+### 验证平台 (8 个)
+
+| # | 平台 | 类型 | 检测维度 |
+|---|------|------|---------|
+| 1 | tls.peet.ws | TLS API | JA3、JA4、密码套件、扩展 |
+| 2 | browserleaks.com | TLS API | JA3、JA3N、Akamai 指纹 |
+| 3 | cloudflare.com | WAF/CDN | TLS + HTTP/2 指纹 |
+| 4 | imperva.com | WAF/CDN | 企业级 WAF 指纹检测 |
+| 5 | f5.com | WAF/CDN | Shape Security 反自动化 |
+| 6 | akamai.com | WAF/CDN | **H2 SETTINGS 帧级指纹** |
+| 7 | datadome.co | WAF/CDN | 行为分析 + TLS 指纹 |
+| 8 | httpbin.org | HTTP | 基础 HTTP 连通性 |
+
+### 质量门禁 — 画像有效性判定
+
+| 平台 | 最低通过率 | 不通过时的处理 |
+|------|-----------|---------------|
+| tls.peet.ws | **100%** | JA3/JA4 必须唯一有效 |
+| browserleaks.com | **100%** | JA3/JA3N 必须交叉验证一致 |
+| cloudflare.com | **100%** | 零拦截，HTTP/2 + TLSv1.3 |
+| imperva.com | **100%** | 零拦截 |
+| f5.com | **100%** | 零拦截 |
+| akamai.com | 0%（预期失败） | 需 fhttp backend (`-tags fhttp`) |
+| datadome.co | 0%（预期失败） | 需 JS 引擎 + 行为模拟 |
+| httpbin.org | ≥50% | 503 为外部限流，非指纹问题 |
+
+**判定规则**：
+- **通过**：tls.peet.ws + browserleaks + cloudflare + imperva + f5 全部 100%
+- **阻塞**：任一个 100% 平台出现 JA3/JA4 为空或与其他平台不一致
+- **已知限制**：akamai/datadome 失败属预期，不阻塞发版
+
+### 当前验证基线 (v1.7.x)
+
+```
+画像数: 10关键画像 (chrome_150/131/109, firefox_148/133, safari_ios_18_5, brave_146, opera_91, okhttp4_android_13, safari_18_1)
+────────────────────────────────────────────
+tls.peet.ws:       10/10 ✅  JA3/JA4 全部唯一
+browserleaks.com:  10/10 ✅  JA3+JA3N 交叉一致
+cloudflare.com:    10/10 ✅  TLSv1.3+HTTP/2 零拦截
+imperva.com:       10/10 ✅  零拦截
+f5.com:            10/10 ✅  零拦截
+akamai.com:         0/10 ❌  H2 指纹拦截 (需 fhttp)
+datadome.co:        0/10 ❌  行为检测 (需 JS)
+httpbin.org:        受外部限流
+────────────────────────────────────────────
+通过率: 50/70 (71%) — 核心平台 100%
+```
+
+### 指纹唯一性约束
+
+- 不同浏览器的 JA3 Hash 必须不同（Chrome ≠ Firefox ≠ Safari）
+- 同浏览器相邻版本的 JA3 可相同（如 Chrome 109 = Opera 91 共享密码套件）
+- JA4 指纹必须包含浏览器标识段（`t13d1516h2` = Chrome, `t13d1917h2` = Firefox）
+- 密码套件列表必须与浏览器声明版本一致
+
+### 验证失败时的处理流程
+
+1. **JA3/JA4 为空或格式异常** → 检查 `isProtocolError` 覆盖范围，可能 H2 握手失败未被识别
+2. **tls.peet.ws 通过但 browserleaks 失败** → 检查 JA3N 计算差异（SNI 影响）
+3. **Cloudflare/Imperva 出现拦截** → 检查 uTLS ClientHelloID 是否正确映射
+4. **Akamai 突然通过** → 可能是 H2 指纹缓存问题，需多次验证确认
+5. **所有平台同时失败** → 检查网络连通性，验证工具自身功能
+
+### 人机验证不变量
+
+- 每次新增画像 → 必须全平台验证
+- 每次升级 uTLS 依赖 → 必须回归全平台
+- 每次修改 `profiles/` 代码 → 必须回归全平台
+- 发版前 → 必须全量 81 画像验证 + 全平台
+- **验证结果必须附在 CHANGELOG 中**（格式：`tls.peet.ws 10/10, cloudflare 10/10, akamai 0/10`）
