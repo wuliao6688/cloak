@@ -1,34 +1,41 @@
-// Package tlsgateway provides TLS ClientHello fingerprinting for Go HTTP clients.
+// Package tlsgateway provides TLS/HTTP fingerprinting for Go HTTP clients.
 //
 // # Architecture
 //
 //	tlsgateway/
-//	├── transport_h2.go   ← Transport (core: uTLS + x/net/http2, zero fork)
-//	├── transport_race.go  ← RaceTransport (H2 vs H1.1 racing, zero fork)
-//	├── header.go          ← HeaderRoundTripper (browser UA/Accept headers)
-//	├── proxy.go           ← HTTP/HTTPS forward proxy
-//	├── doc.go             ← This file
-//	├── transport_test.go
-//	├── transport_race_test.go
-//	└── stress_test.go
+//	├── transport_h2.go      ← Transport (一体式: TLS + HTTP头, 零fork)
+//	├── transport_fprint.go  ← FingerprintTransport (fork http2, 完整H2定制)
+//	├── transport_race.go    ← RaceTransport (H2 vs H1.1 racing)
+//	├── fingerprint.go       ← H2指纹/8浏览器常量/Header排序/Multipart
+//	├── header.go            ← HeaderRoundTripper (deprecated, Transport已内置)
+//	├── middleware.go         ← TransportMiddleware
+//	├── request.go           ← Request 流式 builder + hooks
+//	├── response.go          ← Response + ResultState + TraceInfo
+//	├── retry.go             ← 条件重试 + 指数退避
+//	├── dump.go              ← DumpOptions
+//	├── proxy.go             ← HTTP/HTTPS forward proxy
+//	└── *.go                 ← 测试
 //
 // # Zero-fork design
 //
 // The default build uses only:
-//   - utls (Tor Project, 2498★) — TLS ClientHello customization
+//   - utls (Tor Project) — TLS ClientHello customization
 //   - golang.org/x/net/http2 (Go official) — HTTP/2 protocol
 //   - Go standard library — everything else
 //
 // No bogdanfinn forks. No fhttp. No quic-go forks.
 //
-// # Dealing with Akamai
+// # One-piece Transport (req-style)
 //
-// The Transport handles TLS fingerprinting. For servers that also check
-// HTTP headers (Akamai returns 403 "Access Denied" even with correct TLS),
-// wrap the Transport with HeaderRoundTripper:
+// Transport handles both TLS fingerprinting and HTTP header injection.
+// No need to manually wrap with HeaderRoundTripper:
 //
 //	tr := tlsgateway.NewTransport(profile)
-//	client := &http.Client{
-//	    Transport: tlsgateway.NewHeaderRoundTripper(tr, profile),
-//	}
+//	client := &http.Client{Transport: tr}
+//	client.Get("https://www.akamai.com/")  // → 200
+//
+// # Fluent API
+//
+//	req := tlsgateway.ImpersonateRequest(profile)
+//	req.SetSuccessResult(&v).SetBearerAuthToken("tok").SetRetry(3, ...).Get(url)
 package tlsgateway

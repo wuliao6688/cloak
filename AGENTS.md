@@ -7,24 +7,23 @@
 ```
 tls-client/
 ├── tlsgateway/          ← 主代码 (17 文件)
-│   ├── impersonate.go   ← API 入口: Impersonate/DevMode/SelfCheck
-│   ├── request.go       ← Request 流式 builder
-│   ├── response.go      ← Response + TraceInfo + auto-unmarshal
-│   ├── fingerprint.go   ← H2指纹/浏览器常量/Header排序/Multipart
-│   ├── header.go        ← HeaderRoundTripper
+│   ├── impersonate.go   ← Impersonate/DevMode/SelfCheck/ChainBuilder
+│   ├── request.go       ← Request 流式 builder + hooks
+│   ├── response.go      ← Response + ResultState + TraceInfo
+│   ├── fingerprint.go   ← H2指纹/8浏览器常量/Header排序/Multipart
+│   ├── transport_h2.go  ← Transport (一体式: TLS + HTTP头)
+│   ├── transport_fprint.go ← FingerprintTransport (fork http2)
+│   ├── header.go        ← HeaderRoundTripper (deprecated, 保留向后兼容)
 │   ├── middleware.go     ← TransportMiddleware
 │   ├── retry.go         ← 条件重试 + 指数退避
-│   ├── dump.go          ← DumpOptions 维度控制
-│   ├── transport_h2.go  ← 默认 Transport (H2+H1降级)
-│   ├── transport_fprint.go ← FingerprintTransport (fork http2)
-│   ├── transport_race.go← RaceTransport
+│   ├── dump.go          ← DumpOptions
 │   ├── proxy.go         ← 正向代理
 │   └── *_test.go        ← 测试
 ├── internal/
 │   ├── header/          ← SortKeyValues/HeaderOrderKey
-│   ├── http2/           ← x/net/http2 fork (Settings/StreamID)
-│   └── httpcommon/      ← httpcommon (shared with http2)
-├── profiles/            ← 81 预置画像 + 测试 + 验证
+│   ├── http2/           ← x/net/http2 fork (Settings/StreamID/Priority)
+│   └── httpcommon/      ← httpcommon
+├── profiles/            ← 81 预置画像 + 测试
 ├── cmd/
 │   ├── verify-fingerprints/ ← 12平台验证工具
 │   ├── stress/              ← 压力测试工具
@@ -42,15 +41,20 @@ tls-client/
 - `golang.org/x/net` (Go 官方) — HTTP/2
 - 标准库
 
-**不依赖**：bogdanfinn/fhttp、bogdanfinn/quic-go-utls、任何第三方 fork。
+### 设计原则
+
+- **一体式架构**: Transport 内置 TLS + HTTP 头，无需外部 HeaderRoundTripper
+- **req 靠拢**: API 设计、中间件、钩子、ResultState 全部借鉴 req
+- **零 fork 依赖**: 默认构建仅 uTLS + x/net + stdlib
+- **自动降级**: H2 → H1.1
 
 ### 压力测试基线
 
 ```
 10 分钟 / 20 并发 / Akamai+Cloudflare+tls.peet.ws
-  成功率: 100%
+  成功率: 99.8%+
   Akamai 200: 100%
-  内存: 3.6-3.9 MB (无增长)
+  内存: 3.6-4.0 MB (无增长)
   Goroutines: 102 (无泄漏)
   结论: ✅ 稳定可靠
 ```
@@ -59,17 +63,17 @@ tls-client/
 
 | 层 | 通过率 |
 |----|--------|
-| TLS APIs (tls.peet.ws/browserleaks/browserscan) | 100% (15/15) |
-| WAF/CDN (Cloudflare/Imperva/F5/HCaptcha/reCAPTCHA/Sannysoft) | 100% (30/30) |
-| Akamai (带 HeaderRoundTripper) | 100% |
+| TLS APIs (tls.peet.ws/browserleaks/browserscan) | 100% |
+| WAF/CDN (Cloudflare/Imperva/F5/HCaptcha/reCAPTCHA/Sannysoft) | 100% |
+| Akamai (Transport 一体式) | ✅ 200 |
 | DataDome | ❌ JS 引擎必需 |
 
 ### 编码规范
 
-- error 不以标点结尾，不以大写开头 (Go 惯例)
+- error 不以标点结尾，不以大写开头
 - map/slice/pointer Getter 返回防御性副本
-- 测试用 `-race` 运行
-- 画像新增 → 全平台验证 → 更新本文件基线
+- 测试用 -race 运行
+- 画像新增 → 全平台验证 → 更新基线
 
 ### 质量门禁
 
