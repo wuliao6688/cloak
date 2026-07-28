@@ -121,6 +121,62 @@ func TestTransportH2Concurrent(t *testing.T) {
 	t.Logf("concurrent: %d/%d OK", n-errs, n)
 }
 
+// startLocalTLSServerH1Only starts a TLS server WITHOUT HTTP/2.
+// Used to verify the H2→H1 fallback path works under concurrency.
+func startLocalTLSServerH1Only(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprintf(w, "OK %s %s", r.Proto, r.URL.Path)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestTransportH2FallbackToH1Concurrent verifies the H2→H1 fallback
+// does not break under concurrent load. When the server lacks H2,
+// 20 goroutines should not race on the fallback path and cause
+// "connection force closed" errors.
+func TestTransportH2FallbackToH1Concurrent(t *testing.T) {
+	srv := startLocalTLSServerH1Only(t)
+	tr := NewTransportWithOptions(profiles.Chrome_150, TransportOptions{InsecureSkipVerify: true})
+	client := &http.Client{Transport: tr, Timeout: 15 * time.Second}
+	defer tr.CloseIdleConnections()
+
+	const n = 20
+	var wg sync.WaitGroup
+	errCh := make(chan error, n)
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			resp, err := client.Get(fmt.Sprintf("%s/h2fallback-%d", srv.URL, idx))
+			if err != nil {
+				errCh <- err
+				return
+			}
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			errCh <- nil
+		}(i)
+	}
+	wg.Wait()
+	close(errCh)
+
+	errs := 0
+	for err := range errCh {
+		if err != nil {
+			t.Errorf("fallback concurrent error: %v", err)
+			errs++
+		}
+	}
+	if errs > 0 {
+		t.Fatalf("%d/%d fallback requests failed — H2→H1 race detected", errs, n)
+	}
+	t.Logf("H2→H1 fallback concurrent: %d/%d OK", n-errs, n)
+}
+
 // TestTransportH2SelectProfiles verifies a few key profiles work with H2.
 func TestTransportH2SelectProfiles(t *testing.T) {
 	srv := startLocalTLSServer(t)

@@ -40,6 +40,17 @@ type Transport struct {
 	randomExtensionOrder bool
 	serverNameOverwrite  string
 	insecureSkipVerify   bool
+
+	// h2Disabled tracks hosts that don't support H2.
+	// Map key: "host:port" → true.
+	h2Disabled sync.Map
+
+	// h2ProbeMu serializes H2 capability probing per host.
+	// Without this, 20 goroutines hitting a new non-H2 server
+	// all load h2Disabled=false, all try H2 simultaneously,
+	// and half get "connection force closed" since the H2
+	// transport tears down connections during failure.
+	h2ProbeMu sync.Map // map[string]*sync.Mutex
 }
 
 var _ http.RoundTripper = (*Transport)(nil)
@@ -54,7 +65,6 @@ type TransportOptions struct {
 
 // NewTransport creates a Transport using the given profile.
 // TLS certificate verification is enabled by default.
-// This is the zero-fork default — no fhttp, no QUIC fork.
 func NewTransport(profile profiles.ClientProfile) *Transport {
 	return NewTransportWithOptions(profile, TransportOptions{})
 }
@@ -103,10 +113,13 @@ func NewTransportWithOptions(profile profiles.ClientProfile, opts TransportOptio
 }
 
 // SetProfile replaces the TLS fingerprint profile.
+// Clears the H2 capability cache since a different fingerprint
+// may negotiate H2 differently.
 func (t *Transport) SetProfile(profile profiles.ClientProfile) {
 	t.profileMu.Lock()
 	t.profile = profile
 	t.profileMu.Unlock()
+	t.h2Disabled.Clear()
 }
 
 // SetRandomExtensionOrder enables/disables random TLS extension order.
@@ -117,12 +130,36 @@ func (t *Transport) SetRandomExtensionOrder(enabled bool) {
 }
 
 // RoundTrip implements http.RoundTripper.
+//
+// Protocol negotiation per-host:
+//  1. If host is known to lack H2 → go straight to H1.1.
+//  2. Only ONE goroutine probes H2 per host (h2ProbeMu).
+//  3. If H2 probe succeeds → future requests use H2.
+//  4. If H2 fails with protocol error → mark host disabled, use H1.1.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL.Scheme != "https" {
 		return t.h1p.RoundTrip(req)
 	}
 
-	// Try H2 first.
+	host := hostPort(req)
+
+	// Fast path: host is known to lack H2.
+	if _, disabled := t.h2Disabled.Load(host); disabled {
+		return t.h1.RoundTrip(req)
+	}
+
+	// Get or create a per-host mutex for H2 probing.
+	muI, _ := t.h2ProbeMu.LoadOrStore(host, &sync.Mutex{})
+	mu := muI.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Double-check: another goroutine may have probed while we waited.
+	if _, disabled := t.h2Disabled.Load(host); disabled {
+		return t.h1.RoundTrip(req)
+	}
+
+	// Probe H2.
 	resp, err := t.h2.RoundTrip(req)
 	if err == nil {
 		return resp, nil
@@ -130,14 +167,28 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// H2 failed — check if server doesn't support it.
 	if isProtocolError(err) {
+		t.h2Disabled.Store(host, true)
 		return t.h1.RoundTrip(req)
 	}
 
 	return nil, err
 }
 
+// hostPort extracts "host:port" from the request URL.
+// For HTTPS, port defaults to 443.
+func hostPort(req *http.Request) string {
+	host := req.URL.Hostname()
+	port := req.URL.Port()
+	if port == "" {
+		port = "443"
+	}
+	return host + ":" + port
+}
+
 // isProtocolError returns true when the error indicates the server
-// doesn't support H2 (ALPN mismatch, bad preface, etc).
+// doesn't support H2. This covers ALPN mismatches, H1.1 fallback
+// responses, and connection establishment failures that indicate
+// the host cannot speak H2.
 func isProtocolError(err error) bool {
 	if err == nil {
 		return false
@@ -149,6 +200,11 @@ func isProtocolError(err error) bool {
 	case contains(msg, "unexpected ALPN"):
 		return true
 	case contains(msg, "TLS handshake") && contains(msg, "no application protocol"):
+		return true
+	case contains(msg, "client conn could not be established"):
+		// H2 transport couldn't establish the connection — likely
+		// TLS negotiation failed for H2 specifically. Treat as
+		// "host doesn't support H2" to avoid repeated probe failures.
 		return true
 	}
 	return false
