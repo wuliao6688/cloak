@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/bogdanfinn/tls-client/internal/header"
 )
 
 // ─── H2 SETTINGS types (mirrors req's approach) ─────────────────────────
@@ -111,41 +113,46 @@ var orderMap sync.Map
 
 // OrderedHeadersRoundTripper intercepts RoundTrip and re-orders
 // HTTP/1.1 request headers to match the browser's canonical order.
-// This is needed for strict HTTP fingerprint detection that checks
-// header ordering in addition to header values.
+// It also injects the __header_order__ and __pseudo_header_order__
+// keys so that a forked H2 transport can sort headers accordingly.
+// These keys are stripped from the wire by the H2 encoder.
 type OrderedHeadersRoundTripper struct {
-	transport   http.RoundTripper
-	headerOrder []string
-	orderMap    map[string]int
+	transport          http.RoundTripper
+	headerOrder        []string
+	pseudoHeaderOrder  []string
+	orderMap           map[string]int
 }
 
 // NewOrderedHeadersRoundTripper creates a header-ordering wrapper.
 // headerOrder defines the canonical header ordering. Headers not in
 // the list are appended after the canonical ones.
 func NewOrderedHeadersRoundTripper(transport http.RoundTripper, headerOrder []string) *OrderedHeadersRoundTripper {
+	return NewOrderedHeadersRoundTripperFull(transport, headerOrder, nil)
+}
+
+// NewOrderedHeadersRoundTripperFull creates a header-ordering wrapper
+// with both regular header order and pseudo-header order.
+func NewOrderedHeadersRoundTripperFull(
+	transport http.RoundTripper,
+	headerOrder, pseudoHeaderOrder []string,
+) *OrderedHeadersRoundTripper {
 	om := make(map[string]int, len(headerOrder))
 	for i, h := range headerOrder {
 		om[strings.ToLower(h)] = i
 	}
 	return &OrderedHeadersRoundTripper{
-		transport:   transport,
-		headerOrder: headerOrder,
-		orderMap:    om,
+		transport:         transport,
+		headerOrder:       headerOrder,
+		pseudoHeaderOrder: pseudoHeaderOrder,
+		orderMap:          om,
 	}
 }
 
 // RoundTrip implements http.RoundTripper. It moves headers into the
 // canonical browser order before delegating to the underlying transport.
+// Also injects __header_order__ and __pseudo_header_order__ so that
+// H2-capable transports (forks of x/net/http2) can sort headers on the wire.
 func (o *OrderedHeadersRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// For HTTP/2, header order is controlled by the H2 transport's
-	// header encoding, which follows a deterministic algorithm. x/net/http2
-	// uses canonical ordering for pseudo-headers and then alphabetic for
-	// regular headers. We can't change this without a fork.
-	//
-	// For HTTP/1.1, we can reorder headers. net/http's wire encoding
-	// follows the canonical map iteration order. By clearing and re-adding
-	// headers in the desired order, we control the wire encoding.
-
 	// Clone and reorder headers.
 	oldHeaders := req.Header.Clone()
 	for k := range req.Header {
@@ -157,7 +164,6 @@ func (o *OrderedHeadersRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 	for _, h := range o.headerOrder {
 		vals, ok := oldHeaders[h]
 		if !ok {
-			// Try case-insensitive match.
 			for key, vs := range oldHeaders {
 				if strings.EqualFold(key, h) && !added[key] {
 					for _, v := range vs {
@@ -182,6 +188,17 @@ func (o *OrderedHeadersRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 				req.Header.Add(k, v)
 			}
 		}
+	}
+
+	// Inject header order keys for H2 transport (req pattern).
+	// When using a standard x/net/http2 transport, these are silently
+	// stripped (they're in the exclude list). When using a forked H2
+	// transport, they control the wire encoding order.
+	if len(o.headerOrder) > 0 {
+		req.Header.Set(header.HeaderOrderKey, strings.Join(o.headerOrder, ","))
+	}
+	if len(o.pseudoHeaderOrder) > 0 {
+		req.Header.Set(header.PseudoHeaderOrderKey, strings.Join(o.pseudoHeaderOrder, ","))
 	}
 
 	return o.transport.RoundTrip(req)

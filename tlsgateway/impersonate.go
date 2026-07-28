@@ -114,10 +114,12 @@ func (cb *ChainBuilder) Build() *http.Client {
 	if cb.orderedHdrs {
 		name := cb.profile.GetClientHelloStr()
 		order := ChromeHeaderOrder
+		pseudoOrder := ChromePseudoHeaderOrder
 		if strings.Contains(name, "Firefox") || strings.Contains(name, "firefox") {
 			order = FirefoxHeaderOrder
+			pseudoOrder = FirefoxPseudoHeaderOrder
 		}
-		rt = NewOrderedHeadersRoundTripper(rt, order)
+		rt = NewOrderedHeadersRoundTripperFull(rt, order, pseudoOrder)
 	}
 
 	// Apply custom headers if any.
