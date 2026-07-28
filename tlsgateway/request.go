@@ -3,6 +3,7 @@ package tlsgateway
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"io"
 	"net/http"
 	"net/url"
@@ -36,6 +37,8 @@ type Request struct {
 	baseURL     string
 	outputFile  string
 	output      io.Writer
+	pathParams        map[string]string // REST path params /users/{id}
+	nonCanonicalHdrs  map[string][]string // non-canonical header casing
 }
 
 // SetHeader sets a request header.
@@ -157,9 +160,63 @@ func (r *Request) SetOutput(w io.Writer) *Request {
 	return r
 }
 
-// buildURL constructs the full URL with base URL and query parameters.
+// SetOrderedFormData sets application/x-www-form-urlencoded body with keys in order.
+// Key order is part of the browser fingerprint — different browsers encode differently.
+// Usage: SetOrderedFormData("username", "alice", "password", "secret")
+func (r *Request) SetOrderedFormData(kvs ...string) *Request {
+	var buf bytes.Buffer
+	for i := 0; i < len(kvs); i += 2 {
+		if i > 0 { buf.WriteByte('&') }
+		buf.WriteString(url.QueryEscape(kvs[i]))
+		buf.WriteByte('=')
+		if i+1 < len(kvs) {
+			buf.WriteString(url.QueryEscape(kvs[i+1]))
+		}
+	}
+	r.body = &buf
+	r.SetHeader("Content-Type", "application/x-www-form-urlencoded")
+	return r
+}
+
+// SetHeaderNonCanonical sets a header with exact casing (not HTTP-canonicalized).
+// Header casing can be part of browser fingerprint.
+// Use this for headers like "Content-type" (lowercase 't') or "Accept-encoding".
+func (r *Request) SetHeaderNonCanonical(key, value string) *Request {
+	if r.nonCanonicalHdrs == nil { r.nonCanonicalHdrs = make(map[string][]string) }
+	r.nonCanonicalHdrs[key] = append(r.nonCanonicalHdrs[key], value)
+	return r
+}
+
+// SetPathParam sets a REST path parameter.  /users/{id} → /users/42
+func (r *Request) SetPathParam(key, value string) *Request {
+	if r.pathParams == nil { r.pathParams = make(map[string]string) }
+	r.pathParams[key] = value
+	return r
+}
+
+// SetPathParams sets multiple REST path parameters.
+func (r *Request) SetPathParams(params map[string]string) *Request {
+	for k, v := range params { r.SetPathParam(k, v) }
+	return r
+}
+
+// SetInsecureSkipVerify disables TLS certificate verification.
+// Equivalent to req's EnableInsecureSkipVerify().
+func (r *Request) SetInsecureSkipVerify(skip bool) *Request {
+	if tr, ok := r.client.Transport.(*http.Transport); ok {
+		if tr.TLSClientConfig == nil { tr.TLSClientConfig = &tls.Config{} }
+		tr.TLSClientConfig.InsecureSkipVerify = skip
+	}
+	return r
+}
+
+// buildURL constructs the full URL with base URL, path params, and query parameters.
 func (r *Request) buildURL() string {
 	u := r.url
+	// Substitute path params: /users/{id} → /users/42
+	for k, v := range r.pathParams {
+		u = strings.ReplaceAll(u, "{"+k+"}", url.PathEscape(v))
+	}
 	if r.baseURL != "" && !strings.HasPrefix(u, "http") {
 		u = strings.TrimRight(r.baseURL, "/") + "/" + strings.TrimLeft(u, "/")
 	}
@@ -236,6 +293,16 @@ func (r *Request) execute() (*Response, error) {
 	}
 	for k, v := range r.headers {
 		req.Header.Set(k, v)
+	}
+
+	// Non-canonical headers: written via req.Header map directly to preserve casing.
+	// Note: Go's http.Transport may canonicalize at wire level; for full control
+	// use the internal HTTP/2 fork (FingerprintTransport) + header order trick.
+	for key, vals := range r.nonCanonicalHdrs {
+		delete(req.Header, key) // remove canonical version
+		for _, v := range vals {
+			req.Header[key] = append(req.Header[key], v)
+		}
 	}
 
 	// Run request hooks (req: RequestMiddleware).
