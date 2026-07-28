@@ -53,8 +53,8 @@ go test -race -count=1 -run 'TestWatcher' ./profiles                # 热加载
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `tlsgateway/transport.go` | 217 | `http.RoundTripper` 实现（H2 + H1 fallback） |
-| `tlsgateway/proxy.go` | 301 | HTTP/HTTPS 正向代理（CONNECT 隧道） |
-| `cmd/tlsgateway-proxy/main.go` | 79 | CLI 入口 |
+| `tlsgateway/proxy.go` | 301 | HTTP/HTTPS 正向代理（CONNECT 隧道）。**TLS 证书默认验证，`-insecure` flag 跳过。** |
+| `cmd/tlsgateway-proxy/main.go` | 85 | CLI 入口（`-addr`、`-profile`、`-insecure`、`-profiles`）
 | `cmd/verify-fingerprints/main.go` | 257 | 在线指纹验证工具 |
 
 ### tlsgateway 测试
@@ -75,6 +75,8 @@ go test -race -count=1 ./profiles                                   # 全部 29 
 ### 定位
 
 仅在需要以下功能时维护：HTTP/3、定制 H2 SETTINGS/优先级帧、Protocol Racing、C shared library (CFFI)。
+
+> **设计分层**：绝大多数场景用 tlsgateway（217 行、零 fork 依赖）。Fork 版仅当需要 H3/Racing/CFFI 时使用。
 
 ### 关键文件
 

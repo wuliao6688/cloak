@@ -185,6 +185,8 @@ func TestProxyConnectTunnel(t *testing.T) {
 
 	p, proxyURL := startTestProxy(t, profiles.Chrome_150)
 	defer p.server.Close()
+	// Self-signed test certificate — skip verification for the test.
+	p.SetInsecureSkipVerify(true)
 
 	// Parse proxy address.
 	proxyParsed, _ := url.Parse(proxyURL)

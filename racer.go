@@ -29,9 +29,7 @@ type protocolRacer struct {
 	serverNameOverwrite string
 	transportOptions    *TransportOptions
 	settings            map[http2.SettingID]uint32
-	cachedTransports    map[string]http.RoundTripper
-	cachedTransportsLck *sync.RWMutex
-	transportCache      *transportCacheMeta
+	shardedCache        *shardedTransportCache
 	transportInit       *keyedLockPool
 	certificatePinner   CertificatePinner
 	badPinHandlerFunc   BadPinHandlerFunc
@@ -175,11 +173,11 @@ func (pr *protocolRacer) createTransportForProtocol(protocol, addr string, req *
 }
 
 func (pr *protocolRacer) getCachedTransport(key string) (http.RoundTripper, bool) {
-	return getCachedTransportEntry(pr.cachedTransports, pr.cachedTransportsLck, pr.transportCache, key)
+	return pr.shardedCache.get(key)
 }
 
 func (pr *protocolRacer) setCachedTransport(key string, transport http.RoundTripper) {
-	evicted := setCachedTransportEntry(pr.cachedTransports, pr.cachedTransportsLck, pr.transportCache, key, transport)
+	evicted := pr.shardedCache.set(key, transport)
 	for _, entry := range evicted {
 		if entry.removed {
 			pr.clearProtocolCacheForTransportKey(entry.key)
@@ -189,7 +187,7 @@ func (pr *protocolRacer) setCachedTransport(key string, transport http.RoundTrip
 }
 
 func (pr *protocolRacer) deleteCachedTransport(key string) http.RoundTripper {
-	return deleteCachedTransportEntry(pr.cachedTransports, pr.cachedTransportsLck, pr.transportCache, key)
+	return pr.shardedCache.delete(key)
 }
 
 func (pr *protocolRacer) startRace(req *http.Request, addr string, getTransportFunc func(*http.Request, string) error) (*http.Response, error) {

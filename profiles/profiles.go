@@ -3,6 +3,7 @@ package profiles
 import (
 	"maps"
 	"slices"
+	"sync"
 
 	tls "github.com/bogdanfinn/utls"
 )
@@ -141,7 +142,14 @@ func NewClientProfile(clientHelloId tls.ClientHelloID, settings map[SettingID]ui
 	}
 }
 
+// toSpecMu serializes calls to uTLS ToSpec(), which is not
+// safe for concurrent use due to shared mutable state inside
+// the uTLS library's ClientHelloID-to-Spec conversion.
+var toSpecMu sync.Mutex
+
 func (c ClientProfile) GetClientHelloSpec() (tls.ClientHelloSpec, error) {
+	toSpecMu.Lock()
+	defer toSpecMu.Unlock()
 	return c.clientHelloId.ToSpec()
 }
 

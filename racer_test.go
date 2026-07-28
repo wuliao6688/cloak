@@ -129,11 +129,11 @@ func TestCloneRequestForRaceUsesIndependentBodies(t *testing.T) {
 }
 
 func TestRaceCachesWinningTransportAndClosesLoserResponse(t *testing.T) {
+	sharded := newShardedTransportCache(256)
 	pr := &protocolRacer{
-		protocolCache:       make(map[string]string),
-		cachedTransports:    make(map[string]http.RoundTripper),
-		cachedTransportsLck: &sync.RWMutex{},
-		transportInit:       &keyedLockPool{},
+		protocolCache: make(map[string]string),
+		shardedCache:  sharded,
+		transportInit: &keyedLockPool{},
 	}
 
 	winnerBody := newCloseTrackingBody()
@@ -246,11 +246,12 @@ func TestCachedProtocolUsesReplayBodyAndClosesOriginal(t *testing.T) {
 	})
 
 	const addr = "example.com:443"
+	sharded := newShardedTransportCache(256)
+	sharded.set(addr, transport)
 	pr := &protocolRacer{
-		protocolCache:       map[string]string{addr: "h2"},
-		cachedTransports:    map[string]http.RoundTripper{addr: transport},
-		cachedTransportsLck: &sync.RWMutex{},
-		transportInit:       &keyedLockPool{},
+		protocolCache: map[string]string{addr: "h2"},
+		shardedCache:  sharded,
+		transportInit: &keyedLockPool{},
 	}
 
 	resp, err := pr.race(req, addr, nil)

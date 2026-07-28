@@ -18,7 +18,10 @@ func TestClient_UseSameConnection(t *testing.T) {
 	testServer.Start()
 	defer testServer.Close()
 
-	client, err := tls_client.ProvideDefaultClient(tls_client.NewNoopLogger())
+	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(),
+		tls_client.WithClientProfile(profiles.Chrome_150),
+		tls_client.WithCookieJar(tls_client.NewCookieJar()),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

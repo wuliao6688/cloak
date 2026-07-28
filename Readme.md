@@ -149,7 +149,7 @@ for range watcher.Updates() {
 ```
 ├─ tlsgateway/           轻量 Transport + 本地代理（主推荐）
 │  ├─ transport.go       186行，http.RoundTripper
-│  ├─ proxy.go           312行，HTTP/HTTPS 正向代理
+│  ├─ proxy.go           312行，HTTP/HTTPS 正向代理。**TLS 默认验证（安全）、`-insecure` 跳过。**
 │  └─ *_test.go          14个 race-clean 测试
 ├─ cmd/
 │  ├─ tlsgateway-proxy/  代理 CLI 入口

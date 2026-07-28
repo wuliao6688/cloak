@@ -241,9 +241,8 @@ func WithRandomTLSExtensionOrder() HttpClientOption {
 }
 
 // WithCertificatePinning enables SSL Pinning for the client and will throw an error if the SSL Pin is not matched.
-// Please refer to https://github.com/tam7t/hpkp/#examples in order to see how to generate pins. The certificatePins are a map with the host as key.
-// You can provide a BadPinHandlerFunc or nil as second argument. This function will be executed once a bad ssl pin is detected.
-// BadPinHandlerFunc has to be defined like this: func(req *http.Request){}
+// The certificatePins are a map with the host as key and the value is a string slice of SPKI SHA256 fingerprints.
+// Generate pins with: openssl s_client -connect example.com:443 </dev/null 2>/dev/null | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
 func WithCertificatePinning(certificatePins map[string][]string, handlerFunc BadPinHandlerFunc) HttpClientOption {
 	return func(config *httpClientConfig) {
 		config.certificatePins = cloneCertificatePins(certificatePins)

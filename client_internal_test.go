@@ -336,18 +336,6 @@ func BenchmarkClientSnapshotParallel(b *testing.B) {
 			}
 		})
 	})
-
-	b.Run("rwmutex_fallback", func(b *testing.B) {
-		client := &httpClient{client: underlying}
-		b.ReportAllocs()
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				if client.snapshotClient() != underlying {
-					b.Fatal("unexpected client snapshot")
-				}
-			}
-		})
-	})
 }
 
 func TestDoTreatsHeaderNamesCaseInsensitivelyWhenMergingDefaults(t *testing.T) {

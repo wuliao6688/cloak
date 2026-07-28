@@ -84,14 +84,6 @@ var DefaultOptions = []HttpClientOption{
 	WithNotFollowRedirects(),
 }
 
-func ProvideDefaultClient(logger Logger) (HttpClient, error) {
-	jar := NewCookieJar()
-	options := make([]HttpClientOption, 0, len(DefaultOptions)+1)
-	options = append(options, DefaultOptions...)
-	options = append(options, WithCookieJar(jar))
-	return NewHttpClient(logger, options...)
-}
-
 // NewHttpClient constructs a new HTTP client with the given logger and client options.
 func NewHttpClient(logger Logger, options ...HttpClientOption) (HttpClient, error) {
 	config := &httpClientConfig{
@@ -881,8 +873,8 @@ func (c *httpClient) snapshotClient() *http.Client {
 	if client := c.clientState.Load(); client != nil {
 		return client
 	}
-	c.stateLck.RLock()
-	defer c.stateLck.RUnlock()
+	// Fallback for test code that constructs httpClient without calling
+	// clientState.Store(). In production, clientState is always set.
 	return c.client
 }
 

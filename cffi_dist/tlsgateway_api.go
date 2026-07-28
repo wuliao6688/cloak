@@ -34,6 +34,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	http "github.com/bogdanfinn/fhttp"
@@ -67,7 +68,7 @@ type apiSession struct {
 	// Anti-detection
 	rotateGroup  int // RotateGroup, 0=disabled
 	rotateEvery  int // switch profile every N requests
-	reqCount     int // total request counter
+	reqCount     atomic.Int64 // total request counter (atomic, no lock needed)
 	tlsRefresh   int // force new TLS handshake every N requests (default 50)
 	h2Randomize  bool // randomize H2 settings (Chaos mode defaults to true)
 	needRebuild  bool // set by setters, consumed by apiRequest
@@ -346,7 +347,7 @@ func tg_session_set_profile(sessionID *C.char, profileID C.int) C.int {
 	s.profileID = int(profileID)
 	s.rebuild()
 	s.mu.Unlock()
-	s.reqCount++
+	s.reqCount.Add(1)
 	return errOK
 }
 
@@ -667,15 +668,15 @@ func apiRequestWithType(sessionID *C.char, method string, requestURL *C.char, bo
 
 	// ─── Anti-detection: rotation + TLS refresh ───────────
 	s.mu.Lock()
-	s.reqCount++
+	reqCount := int(s.reqCount.Add(1))
 	needRebuild := false
 
 	// Profile rotation (Chaos mode: random profile every request + force TLS refresh)
 	if s.rotateGroup == 6 {
 		s.profileID = int(profiles.ChaosProfile())
 		needRebuild = true
-	} else if s.rotateGroup > 0 && s.rotateEvery > 0 && s.reqCount%s.rotateEvery == 0 {
-		nextPID, err := profiles.NextRotateProfile(profiles.RotateGroup(s.rotateGroup), s.reqCount)
+	} else if s.rotateGroup > 0 && s.rotateEvery > 0 && reqCount%s.rotateEvery == 0 {
+		nextPID, err := profiles.NextRotateProfile(profiles.RotateGroup(s.rotateGroup), reqCount)
 		if err == nil {
 			s.profileID = int(nextPID)
 			needRebuild = true
@@ -683,7 +684,7 @@ func apiRequestWithType(sessionID *C.char, method string, requestURL *C.char, bo
 	}
 
 	// TLS context refresh (new ClientHello, new session ticket)
-	if s.rotateGroup == 6 || (s.tlsRefresh > 0 && s.reqCount%s.tlsRefresh == 0) {
+	if s.rotateGroup == 6 || (s.tlsRefresh > 0 && reqCount%s.tlsRefresh == 0) {
 		needRebuild = true
 	}
 
@@ -694,7 +695,7 @@ func apiRequestWithType(sessionID *C.char, method string, requestURL *C.char, bo
 	}
 
 	// Proxy rotation
-	if len(s.proxyList) > 0 && s.proxyRotate > 0 && s.reqCount%s.proxyRotate == 0 {
+	if len(s.proxyList) > 0 && s.proxyRotate > 0 && reqCount%s.proxyRotate == 0 {
 		s.proxyIdx = (s.proxyIdx + 1) % len(s.proxyList)
 		s.proxy = s.proxyList[s.proxyIdx]
 		needRebuild = true

@@ -1,13 +1,15 @@
 package tls_client
 
 import (
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
 
 	http "github.com/bogdanfinn/fhttp"
 	tls "github.com/bogdanfinn/utls"
-	"github.com/tam7t/hpkp"
 )
 
 var DefaultBadPinHandler = func(req *http.Request) {
@@ -16,10 +18,35 @@ var DefaultBadPinHandler = func(req *http.Request) {
 
 var ErrBadPinDetected = errors.New("bad ssl pin detected")
 
+// pinHeader holds a set of pinned SPKI SHA256 hashes for a host.
+// Replaces the deprecated hpkp.Header from github.com/tam7t/hpkp.
+type pinHeader struct {
+	Permanent         bool
+	Sha256Pins        []string
+	IncludeSubDomains bool
+}
+
+// Matches returns true if the given pin matches any of the pinned hashes.
+func (p *pinHeader) Matches(pin string) bool {
+	for _, h := range p.Sha256Pins {
+		if h == pin {
+			return true
+		}
+	}
+	return false
+}
+
+// spkiFingerprint computes the base64-encoded SHA256 hash of the
+// certificate's Subject Public Key Info (SPKI) — the standard pin format.
+func spkiFingerprint(cert *x509.Certificate) string {
+	hash := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+	return base64.StdEncoding.EncodeToString(hash[:])
+}
+
 type certificatePinner struct {
 	certificatePins     map[string][]string
-	pinnedHosts         map[string]*hpkp.Header
-	wildcardPinnedHosts map[string]*hpkp.Header
+	pinnedHosts         map[string]*pinHeader
+	wildcardPinnedHosts map[string]*pinHeader
 }
 
 type CertificatePinner interface {
@@ -30,8 +57,8 @@ func NewCertificatePinner(certificatePins map[string][]string) (CertificatePinne
 	certificatePins = cloneCertificatePins(certificatePins)
 	pinner := &certificatePinner{
 		certificatePins:     certificatePins,
-		pinnedHosts:         make(map[string]*hpkp.Header, len(certificatePins)),
-		wildcardPinnedHosts: make(map[string]*hpkp.Header),
+		pinnedHosts:         make(map[string]*pinHeader, len(certificatePins)),
+		wildcardPinnedHosts: make(map[string]*pinHeader),
 	}
 
 	err := pinner.init()
@@ -61,7 +88,7 @@ func (cp *certificatePinner) init() error {
 			}
 		}
 
-		pinnedHost := &hpkp.Header{
+		pinnedHost := &pinHeader{
 			Permanent:         true,
 			Sha256Pins:        append([]string(nil), pinsByHost...),
 			IncludeSubDomains: includeSubdomains,
@@ -92,7 +119,7 @@ func (cp *certificatePinner) Pin(conn *tls.UConn, host string) error {
 	actualPins := make([]string, 0, len(peerCertificates))
 
 	for _, peerCert := range peerCertificates {
-		peerPin := hpkp.Fingerprint(peerCert)
+		peerPin := spkiFingerprint(peerCert)
 		if pinnedHost.Matches(peerPin) {
 			return nil
 		}
@@ -102,7 +129,7 @@ func (cp *certificatePinner) Pin(conn *tls.UConn, host string) error {
 	return fmt.Errorf("%w, found pins: %v", ErrBadPinDetected, actualPins)
 }
 
-func (cp *certificatePinner) lookupPinnedHost(host string) *hpkp.Header {
+func (cp *certificatePinner) lookupPinnedHost(host string) *pinHeader {
 	host = normalizePinHost(host)
 	if host == "" {
 		return nil

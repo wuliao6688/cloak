@@ -55,6 +55,11 @@ type Proxy struct {
 
 	// Logger (defaults to log.Default).
 	Logger *log.Logger
+
+	// InsecureSkipVerify controls TLS certificate verification.
+	// Default: false (certificates are verified). Set to true only for
+	// debugging/testing with self-signed certificates.
+	insecureSkipVerify bool
 }
 
 // NewProxy creates a new local forward proxy.
@@ -119,11 +124,13 @@ func (p *Proxy) SetProfile(profile profiles.ClientProfile) {
 func (p *Proxy) rebuildTransport() {
 	p.mu.RLock()
 	profile := p.profile
+	insecure := p.insecureSkipVerify
 	p.mu.RUnlock()
 
 	tr := NewTransport(profile)
-	// H2 transport's TLSClientConfig already has InsecureSkipVerify=true.
-	tr.h2.TLSClientConfig.InsecureSkipVerify = true
+	if insecure {
+		tr.setInsecureSkipVerify(true)
+	}
 
 	p.mu.Lock()
 	old := p.transport
@@ -133,6 +140,16 @@ func (p *Proxy) rebuildTransport() {
 	if old != nil {
 		old.CloseIdleConnections()
 	}
+}
+
+// SetInsecureSkipVerify controls TLS certificate verification for
+// upstream connections. Default is false (certificates are verified).
+// Only set to true for debugging with self-signed certificates.
+func (p *Proxy) SetInsecureSkipVerify(v bool) {
+	p.mu.Lock()
+	p.insecureSkipVerify = v
+	p.mu.Unlock()
+	p.rebuildTransport()
 }
 
 // handleRequest processes all proxy requests. It distinguishes between

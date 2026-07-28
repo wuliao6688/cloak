@@ -32,8 +32,7 @@ func TestRoundTripperClosesRequestBodyWhenTransportInitializationFails(t *testin
 
 	rt := &roundTripper{
 		rtCacheState: rtCacheState{
-			cachedConnections: make(map[string]net.Conn),
-			cachedTransports:  make(map[string]http.RoundTripper),
+			shardedCache: newShardedTransportCache(0),
 		},
 	}
 	if _, err := rt.RoundTrip(req); err == nil {
@@ -79,17 +78,17 @@ func (t *closeTrackingHTTP3Transport) Close() error {
 
 func TestRoundTripperCloseIdleConnectionsResetsSharedCaches(t *testing.T) {
 	oldTransport := &closeIdleTrackingTransport{}
-	oldMap := map[string]http.RoundTripper{"example.com:443": oldTransport}
+	shardedCache := newShardedTransportCache(0)
+	shardedCache.set("example.com:443", oldTransport)
+
 	racer := &protocolRacer{
-		protocolCache:       map[string]string{"example.com:443": "h2"},
-		cachedTransports:    oldMap,
-		cachedTransportsLck: &sync.RWMutex{},
-		transportInit:       &keyedLockPool{},
+		protocolCache: map[string]string{"example.com:443": "h2"},
+		shardedCache:  shardedCache,
+		transportInit: &keyedLockPool{},
 	}
 	rt := &roundTripper{
 		rtCacheState: rtCacheState{
-			cachedConnections: make(map[string]net.Conn),
-			cachedTransports:  oldMap,
+			shardedCache: shardedCache,
 		},
 		racer: racer,
 	}
@@ -99,7 +98,7 @@ func TestRoundTripperCloseIdleConnectionsResetsSharedCaches(t *testing.T) {
 	if oldTransport.closed != 1 {
 		t.Fatalf("expected detached transport to be closed once, got %d", oldTransport.closed)
 	}
-	if len(rt.cachedTransports) != 0 || len(racer.cachedTransports) != 0 {
+	if len(rt.shardedCache.all()) != 0 || len(racer.shardedCache.all()) != 0 {
 		t.Fatal("shared transport cache was not cleared")
 	}
 	if len(racer.protocolCache) != 0 {
@@ -118,8 +117,7 @@ func TestRoundTripperTransportCacheUsesLRUEviction(t *testing.T) {
 	third := &closeIdleTrackingTransport{}
 	rt := &roundTripper{
 		rtCacheState: rtCacheState{
-			cachedTransports: make(map[string]http.RoundTripper),
-			transportCache:   newTransportCacheMeta(2),
+			shardedCache: newShardedTransportCache(2),
 		},
 	}
 
@@ -141,8 +139,7 @@ func TestRoundTripperTransportCacheUsesLRUEviction(t *testing.T) {
 func BenchmarkTransportCacheHitParallel(b *testing.B) {
 	rt := &roundTripper{
 		rtCacheState: rtCacheState{
-			cachedTransports: make(map[string]http.RoundTripper),
-			transportCache:   newTransportCacheMeta(8),
+			shardedCache: newShardedTransportCache(8),
 		},
 	}
 	rt.setCachedTransport("example.com:443", &closeIdleTrackingTransport{})
@@ -186,8 +183,7 @@ func TestHTTP2DialContextRegistrationSkipsCancellationWatchForBackground(t *test
 func TestTransportCacheConcurrentHitsAndEvictions(t *testing.T) {
 	rt := &roundTripper{
 		rtCacheState: rtCacheState{
-			cachedTransports: make(map[string]http.RoundTripper),
-			transportCache:   newTransportCacheMeta(8),
+			shardedCache: newShardedTransportCache(8),
 		},
 	}
 	for i := 0; i < 8; i++ {
@@ -218,8 +214,8 @@ func TestTransportCacheConcurrentHitsAndEvictions(t *testing.T) {
 	close(start)
 	wg.Wait()
 
-	if len(rt.cachedTransports) > 8 {
-		t.Fatalf("transport cache exceeded its configured capacity: %d", len(rt.cachedTransports))
+	if len(rt.shardedCache.all()) > 8 {
+		t.Fatalf("transport cache exceeded its configured capacity: %d", len(rt.shardedCache.all()))
 	}
 }
 
@@ -228,8 +224,7 @@ func TestHTTP3LRUEvictionWaitsForActiveResponseBody(t *testing.T) {
 	http3Transport := newRetiringHTTP3Transport(underlying)
 	rt := &roundTripper{
 		rtCacheState: rtCacheState{
-			cachedTransports: make(map[string]http.RoundTripper),
-			transportCache:   newTransportCacheMeta(1),
+			shardedCache: newShardedTransportCache(1),
 		},
 	}
 	rt.setCachedTransport("first:h3", http3Transport)
@@ -301,7 +296,7 @@ func TestRetiredHTTP3TransportRejectsNewRequestsWhileDraining(t *testing.T) {
 func TestHTTP2RedialUsesActiveRequestContext(t *testing.T) {
 	rt := &roundTripper{
 		rtCacheState: rtCacheState{
-			cachedConnections: make(map[string]net.Conn),
+			shardedCache: newShardedTransportCache(0),
 		},
 		dialer: &contextErrorDialer{},
 	}

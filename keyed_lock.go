@@ -64,9 +64,3 @@ func (p *keyedLockPool) releaseReference(key string, entry *keyedLockEntry) {
 	}
 	p.mu.Unlock()
 }
-
-func (p *keyedLockPool) size() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return len(p.entries)
-}

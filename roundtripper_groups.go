@@ -5,7 +5,6 @@ import (
 	"net"
 	"sync"
 
-	http "github.com/bogdanfinn/fhttp"
 	"github.com/bogdanfinn/fhttp/http2"
 	tls "github.com/bogdanfinn/utls"
 
@@ -93,10 +92,8 @@ type rtH3Params struct {
 // rtCacheState groups connection and transport caches with their locks.
 type rtCacheState struct {
 	cachedConnections    map[string]net.Conn
-	cachedTransports     map[string]http.RoundTripper
-	transportCache       *transportCacheMeta
 	cachedConnectionsLck sync.Mutex
-	cachedTransportsLck  sync.RWMutex
+	shardedCache         *shardedTransportCache // replaces cachedTransports + lock + meta
 	transportInit        keyedLockPool
 }
 

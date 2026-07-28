@@ -67,30 +67,31 @@ func (rt *roundTripper) CloseIdleConnections() {
 		_ = connection.Close()
 	}
 
-	rt.cachedTransportsLck.Lock()
-	transports := make([]http.RoundTripper, 0, len(rt.cachedTransports))
-	for key, transport := range rt.cachedTransports {
-		transports = append(transports, transport)
-		delete(rt.cachedTransports, key)
-	}
-	resetTransportCacheMeta(rt.transportCache)
-	rt.cachedTransportsLck.Unlock()
+	// Collect and close all cached transports across shards.
+	if rt.shardedCache != nil {
+		allTransports := rt.shardedCache.all()
+		transports := make([]http.RoundTripper, 0, len(allTransports))
+		for _, t := range allTransports {
+			transports = append(transports, t)
+		}
+		rt.shardedCache.reset()
 
-	if rt.racer != nil {
-		rt.racer.resetProtocolCache()
-	}
+		if rt.racer != nil {
+			rt.racer.resetProtocolCache()
+		}
 
-	for _, transport := range transports {
-		closeIdleTransport(transport)
+		for _, transport := range transports {
+			closeIdleTransport(transport)
+		}
 	}
 }
 
 func (rt *roundTripper) getCachedTransport(key string) (http.RoundTripper, bool) {
-	return getCachedTransportEntry(rt.cachedTransports, &rt.cachedTransportsLck, rt.transportCache, key)
+	return rt.shardedCache.get(key)
 }
 
 func (rt *roundTripper) setCachedTransport(key string, transport http.RoundTripper) {
-	evicted := setCachedTransportEntry(rt.cachedTransports, &rt.cachedTransportsLck, rt.transportCache, key, transport)
+	evicted := rt.shardedCache.set(key, transport)
 	for _, entry := range evicted {
 		if entry.removed && rt.racer != nil {
 			rt.racer.clearProtocolCacheForTransportKey(entry.key)
@@ -109,6 +110,9 @@ func (rt *roundTripper) takeCachedConnection(addr string) net.Conn {
 
 func (rt *roundTripper) cacheConnection(addr string, conn net.Conn) {
 	rt.cachedConnectionsLck.Lock()
+	if rt.cachedConnections == nil {
+		rt.cachedConnections = make(map[string]net.Conn)
+	}
 	previous := rt.cachedConnections[addr]
 	rt.cachedConnections[addr] = conn
 	rt.cachedConnectionsLck.Unlock()
@@ -790,13 +794,14 @@ func newRoundTripper(clientProfile profiles.ClientProfile, transportOptions *Tra
 			badPinHandlerFunc:           badPinHandlerFunc,
 		},
 		rtCacheState: rtCacheState{
-			cachedTransports:  make(map[string]http.RoundTripper),
-			transportCache:    newTransportCacheMeta(maxCachedTransports(transportOptions)),
-			cachedConnections: make(map[string]net.Conn),
+			shardedCache: newShardedTransportCache(maxCachedTransports(transportOptions)),
+			// cachedConnections — lazy-init on first use; most clients
+			// never cache connections (probe race path only).
 		},
 		rtH2DialState: rtH2DialState{
-			http2DialContexts: make(map[string]map[uint64]context.Context),
-			http2DialCancels:  make(map[string]map[uint64]context.CancelFunc),
+			// http2DialContexts / http2DialCancels — lazy-init;
+			// nil-safe in register/cancel path, avoiding 2 allocs
+			// per client when shared dials never occur.
 		},
 		rtH3Params: rtH3Params{
 			http3Settings:          clientProfile.GetHttp3Settings(),
@@ -821,9 +826,7 @@ func newRoundTripper(clientProfile profiles.ClientProfile, transportOptions *Tra
 			serverNameOverwrite:    serverNameOverwrite,
 			transportOptions:       transportOptions,
 			settings:               profileSettings(clientProfile.GetSettings()),
-			cachedTransports:       rt.cachedTransports,
-			cachedTransportsLck:    &rt.cachedTransportsLck,
-			transportCache:         rt.transportCache,
+			shardedCache:           rt.shardedCache,
 			transportInit:          &rt.transportInit,
 			certificatePinner:      pinner,
 			badPinHandlerFunc:      badPinHandlerFunc,

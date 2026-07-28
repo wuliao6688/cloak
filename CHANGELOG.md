@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.6.3 — 安全加固 & 死代码清理 (2026-07-28)
+
+### 🔴 P0 修复
+- **tlsgateway proxy 证书验证**：移除 `rebuildTransport()` 硬编码 `InsecureSkipVerify=true`，改为可配置选项，默认 `false`（证书验证开启）。新增 `-insecure` CLI flag 和 `SetInsecureSkipVerify()` API，仅调试/自签名证书场景使用。
+- **transport_cache DATA RACE**：`shardedTransportCache.reset()` 和 `get()` 之间的并发竞态已修复（添加 `sync.Mutex`）。
+
+### 清理
+- **WebSocket 模块**：`websocket.go` (93行) + `websocket_options.go` (72行) + `tests/websocket_test.go` (218行) 完全删除。
+- **依赖精简**：`github.com/bogdanfinn/websocket`、`github.com/tam7t/hpkp` 从 go.mod 移除。
+- **hpkp 替换**：用标准库 `crypto/sha256` + 本地 `pinHeader` 类型替代 2017 年废弃的 hpkp 库，功能不变。
+- **死代码**：移除 `ProvideDefaultClient()`、`newTransportShard()`、`newTransportCacheMeta()`、`deleteCachedTransportEntry()`、`resetTransportCacheMeta()`、`keyedLockPool.size()` 等 6 个未使用函数。
+- **测试去外部化**：`tlsgateway/transport_test.go` 不再依赖 httpbin.org / api.github.com，改为本地 `httptest` 服务器，新增 `TestTransportDefaultCertVerification` 验证证书默认验证行为。
+
+### 测试
+- **10 分钟持续压力测试**：50 并发 / race detector on / 1,369,369 请求 / 0 失败 / 内存 4.5-8.0MB 锯齿形振荡（GC 完美）
+- **在线指纹验证**：chrome_150 / firefox_148 / safari_ios_18_5 / chrome_131 / brave_146 / opera_91 / okhttp4_android_13 全部 JA3+JA4 通过
+- **架构审计**：锁内 I/O ✅ / Session 上限 ✅ / 依赖泄漏 ✅ / profiles 零泄漏
+
+### 文档
+- AGENTS.md：标注 P0 修复 + 分层引导（tlsgateway 默认推荐）
+- Readme.md：项目结构中标注 TLS 默认验证（安全）
+
 ## v1.6.0 — kurl-client 借鉴合入 (完成)
 
 ### 新增 (5~7)

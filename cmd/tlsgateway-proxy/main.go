@@ -34,6 +34,7 @@ func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	profileKey := flag.String("profile", "chrome_150", "TLS client profile")
 	jsonPath := flag.String("profiles", "", "optional JSON profiles file to load at startup")
+	insecure := flag.Bool("insecure", false, "skip TLS certificate verification (for debugging only)")
 	flag.Parse()
 
 	// Load profiles from JSON if specified.
@@ -58,6 +59,9 @@ func main() {
 	log.Printf("tlsgateway proxy starting with profile: %s", resolved.GetClientHelloStr())
 
 	p := tlsgateway.NewProxy(*addr, resolved)
+	if *insecure {
+		p.SetInsecureSkipVerify(true)
+	}
 
 	// Graceful shutdown.
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

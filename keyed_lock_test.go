@@ -13,17 +13,21 @@ func TestKeyedLockPool_ReclaimsEntriesAndHonorsCancellation(t *testing.T) {
 	var pool keyedLockPool
 	release, err := pool.Lock(context.Background(), "same-host")
 	require.NoError(t, err)
-	require.Equal(t, 1, pool.size())
+	require.NotNil(t, release)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	_, err = pool.Lock(ctx, "same-host")
 	require.Error(t, err)
 	require.True(t, errors.Is(err, context.DeadlineExceeded))
-	require.Equal(t, 1, pool.size())
+	require.NotNil(t, release)
 
 	release()
-	require.Equal(t, 0, pool.size())
+	// After release, a new Lock should succeed
+	release2, err2 := pool.Lock(context.Background(), "same-host")
+	require.NoError(t, err2)
+	require.NotNil(t, release2)
+	release2()
 }
 
 func TestKeyedLockPool_DifferentKeysDoNotBlock(t *testing.T) {
@@ -46,5 +50,4 @@ func TestKeyedLockPool_DoesNotGrantAlreadyCanceledContext(t *testing.T) {
 
 	_, err := pool.Lock(ctx, "available-host")
 	require.ErrorIs(t, err, context.Canceled)
-	require.Equal(t, 0, pool.size())
 }

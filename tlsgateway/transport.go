@@ -149,6 +149,18 @@ func isProtocolError(err error) bool {
 	return false
 }
 
+func (t *Transport) setInsecureSkipVerify(v bool) {
+	t.profileMu.Lock()
+	defer t.profileMu.Unlock()
+	t.insecureSkipVerify = v
+	if t.h2 != nil {
+		t.h2.TLSClientConfig.InsecureSkipVerify = v
+	}
+	if t.h1 != nil && t.h1.TLSClientConfig != nil {
+		t.h1.TLSClientConfig.InsecureSkipVerify = v
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && searchSub(s, substr)
 }

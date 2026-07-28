@@ -1,9 +1,6 @@
 package tls_client
 
 import (
-	"sync"
-
-	http "github.com/bogdanfinn/fhttp"
 	"github.com/bogdanfinn/fhttp/http2"
 	"github.com/bogdanfinn/tls-client/bandwidth"
 	tls "github.com/bogdanfinn/utls"
@@ -17,9 +14,7 @@ type protocolRacerConfig struct {
 	serverNameOverwrite string
 	transportOptions    *TransportOptions
 	settings            map[http2.SettingID]uint32
-	cachedTransports    map[string]http.RoundTripper
-	cachedTransportsLck *sync.RWMutex
-	transportCache      *transportCacheMeta
+	shardedCache        *shardedTransportCache
 	transportInit       *keyedLockPool
 	certificatePinner   CertificatePinner
 	badPinHandlerFunc   BadPinHandlerFunc
@@ -41,9 +36,7 @@ func (c *protocolRacerConfig) toRacer() *protocolRacer {
 		serverNameOverwrite:    c.serverNameOverwrite,
 		transportOptions:       c.transportOptions,
 		settings:               c.settings,
-		cachedTransports:       c.cachedTransports,
-		cachedTransportsLck:    c.cachedTransportsLck,
-		transportCache:         c.transportCache,
+		shardedCache:           c.shardedCache,
 		transportInit:          c.transportInit,
 		certificatePinner:      c.certificatePinner,
 		badPinHandlerFunc:      c.badPinHandlerFunc,
