@@ -146,18 +146,21 @@ go run ./cmd/verify-fingerprints -all
 go run ./cmd/verify-fingerprints -all -json > fingerprints_$(date +%Y%m%d).json
 ```
 
-### 验证平台 (8 个)
+### 验证平台 (11 个)
 
 | # | 平台 | 类型 | 检测维度 |
 |---|------|------|---------|
 | 1 | tls.peet.ws | TLS API | JA3、JA4、密码套件、扩展 |
 | 2 | browserleaks.com | TLS API | JA3、JA3N、Akamai 指纹 |
 | 3 | cloudflare.com | WAF/CDN | TLS + HTTP/2 指纹 |
-| 4 | imperva.com | WAF/CDN | 企业级 WAF 指纹检测 |
+| 4 | imperva.com | WAF/CDN | 企业级 WAF |
 | 5 | f5.com | WAF/CDN | Shape Security 反自动化 |
-| 6 | akamai.com | WAF/CDN | **H2 SETTINGS 帧级指纹** |
-| 7 | datadome.co | WAF/CDN | 行为分析 + TLS 指纹 |
-| 8 | httpbin.org | HTTP | 基础 HTTP 连通性 |
+| 6 | akamai.com | WAF/CDN | **H2 指纹 + HTTP 头检测** |
+| 7 | datadome.co | WAF/CDN | JS 行为分析（需 JS 引擎） |
+| 8 | hcaptcha.com | WAF/CDN | 人机验证页面加载 |
+| 9 | recaptcha-demo | WAF/CDN | Google reCAPTCHA 加载 |
+| 10 | sannysoft.com | WAF/CDN | 综合机器人检测 |
+| 11 | httpbin.org | HTTP | 基础 HTTP 连通性 |
 
 ### 质量门禁 — 画像有效性判定
 
@@ -169,7 +172,10 @@ go run ./cmd/verify-fingerprints -all -json > fingerprints_$(date +%Y%m%d).json
 | imperva.com | **100%** | 零拦截 |
 | f5.com | **100%** | 零拦截 |
 | akamai.com | ≥0%（非TLS层面） | TLS通过→403。需 HTTP header 伪装（UA/Accept等） |
-| datadome.co | 0%（预期失败） | JS 引擎 + 行为模拟。非 TLS 限制 |
+| datadome.co | 0%（预期失败） | JS 引擎 + 行为模拟. 非 TLS 限制 |
+| hcaptcha.com | **100%** | 人机验证页面可加载 |
+| recaptcha-demo | **100%** | Google reCAPTCHA 页面可加载 |
+| sannysoft.com | **100%** | 机器人检测 PASS |
 | httpbin.org | ≥50% | 503 为外部限流，非指纹问题 |
 
 **判定规则**：
