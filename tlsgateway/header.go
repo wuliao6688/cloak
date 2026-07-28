@@ -1,0 +1,100 @@
+package tlsgateway
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/bogdanfinn/tls-client/profiles"
+)
+
+// HeaderRoundTripper wraps a Transport and injects profile-appropriate
+// browser HTTP headers. This is needed for Akamai and similar CDNs that
+// check HTTP headers (User-Agent, Accept, etc.) in addition to TLS
+// ClientHello fingerprints.
+//
+// Does NOT depend on any fork — uses only standard library types.
+type HeaderRoundTripper struct {
+	transport http.RoundTripper
+	headers   map[string]string
+}
+
+// NewHeaderRoundTripper creates a header-injecting wrapper that sets
+// browser headers based on the profile.
+func NewHeaderRoundTripper(transport http.RoundTripper, profile profiles.ClientProfile) *HeaderRoundTripper {
+	headers := browserHeaders(profile)
+	return &HeaderRoundTripper{
+		transport: transport,
+		headers:   headers,
+	}
+}
+
+// RoundTrip implements http.RoundTripper. It adds browser headers
+// before delegating to the wrapped transport.
+func (h *HeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	for k, v := range h.headers {
+		if req.Header.Get(k) == "" {
+			req.Header.Set(k, v)
+		}
+	}
+	return h.transport.RoundTrip(req)
+}
+
+// browserHeaders returns browser-appropriate HTTP headers for the profile.
+func browserHeaders(profile profiles.ClientProfile) map[string]string {
+	// If the user already sets their own headers, don't override.
+	// We only inject missing headers.
+	name := profile.GetClientHelloStr()
+	h := map[string]string{
+		"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		"Accept-Language": "en-US,en;q=0.9",
+		"Cache-Control":   "max-age=0",
+	}
+
+	// Chrome family
+	if strings.Contains(name, "Chrome") || strings.Contains(name, "chrome") ||
+		strings.Contains(name, "Brave") || strings.Contains(name, "brave") ||
+		strings.Contains(name, "Opera") || strings.Contains(name, "opera") ||
+		strings.Contains(name, "Edge") || strings.Contains(name, "edge") {
+		ver := extractVersion(name)
+		h["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + ver + ".0.0.0 Safari/537.36"
+		h["Sec-Ch-Ua"] = `"Chromium";v="` + ver + `", "Google Chrome";v="` + ver + `"`
+		h["Sec-Ch-Ua-Platform"] = `"Windows"`
+		h["Sec-Ch-Ua-Mobile"] = "?0"
+		return h
+	}
+
+	// Firefox family
+	if strings.Contains(name, "Firefox") || strings.Contains(name, "firefox") {
+		ver := extractVersion(name)
+		h["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:" + ver + ".0) Gecko/20100101 Firefox/" + ver + ".0"
+		return h
+	}
+
+	// Safari family
+	if strings.Contains(name, "Safari") || strings.Contains(name, "safari") ||
+		strings.Contains(name, "iOS") || strings.Contains(name, "ios") {
+		h["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15"
+		return h
+	}
+
+	// OkHttp / Android
+	if strings.Contains(name, "okhttp") || strings.Contains(name, "OkHttp") ||
+		strings.Contains(name, "Android") || strings.Contains(name, "android") {
+		h["User-Agent"] = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
+		return h
+	}
+
+	// Fallback: generic browser UA
+	h["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+	return h
+}
+
+// extractVersion pulls the version number from a profile name like "Chrome-150" or "Firefox-148".
+func extractVersion(name string) string {
+	for i, c := range name {
+		if c >= '0' && c <= '9' {
+			return name[i:]
+		}
+	}
+	return "150"
+}

@@ -1,38 +1,34 @@
-// Package tlsgateway provides TLS ClientHello fingerprinting for go HTTP clients.
+// Package tlsgateway provides TLS ClientHello fingerprinting for Go HTTP clients.
 //
-// # Layered architecture
+// # Architecture
 //
 //	tlsgateway/
-//	├── transport_h2.go      ← Transport (default, zero fork: uTLS + x/net/http2)
-//	├── transport_race.go    ← RaceTransport (zero fork: H2 vs H1.1 racing)
-//	├── transport_h3.go      ← H3Transport (-tags h3: QUIC/HTTP3 via quic-go-utls)
-//	├── transport_fhttp.go   ← FhttpTransport (-tags fhttp: Akamai-level H2 control)
-//	└── proxy.go             ← HTTP/S forward proxy for any language
+//	├── transport_h2.go   ← Transport (core: uTLS + x/net/http2, zero fork)
+//	├── transport_race.go  ← RaceTransport (H2 vs H1.1 racing, zero fork)
+//	├── header.go          ← HeaderRoundTripper (browser UA/Accept headers)
+//	├── proxy.go           ← HTTP/HTTPS forward proxy
+//	├── doc.go             ← This file
+//	├── transport_test.go
+//	├── transport_race_test.go
+//	└── stress_test.go
 //
-// # Quick start
+// # Zero-fork design
 //
-//	// Default (zero fork)
-//	tr := tlsgateway.NewTransport(profiles.Chrome_150)
-//	client := &http.Client{Transport: tr}
-//	resp, _ := client.Get("https://example.com")
+// The default build uses only:
+//   - utls (Tor Project, 2498★) — TLS ClientHello customization
+//   - golang.org/x/net/http2 (Go official) — HTTP/2 protocol
+//   - Go standard library — everything else
 //
-//	// With racing (zero fork)
-//	tr := tlsgateway.NewRaceTransport(profiles.Chrome_150, tlsgateway.DefaultRaceOptions())
+// No bogdanfinn forks. No fhttp. No quic-go forks.
 //
-//	// With HTTP/3 (go build -tags h3)
-//	tr := tlsgateway.NewH3Transport(profiles.Chrome_150, tlsgateway.H3Options{PreferH3: true})
+// # Dealing with Akamai
 //
-//	// With fhttp (go build -tags fhttp)
-//	tr := tlsgateway.NewFhttpTransport(profiles.Chrome_150, tlsgateway.FhttpOptions{})
+// The Transport handles TLS fingerprinting. For servers that also check
+// HTTP headers (Akamai returns 403 "Access Denied" even with correct TLS),
+// wrap the Transport with HeaderRoundTripper:
 //
-// # Proxy mode (any language)
-//
-//	go run ./cmd/tlsgateway-proxy -profile chrome_150
-//	HTTPS_PROXY=http://localhost:8080 curl https://example.com
-//
-// # Dependencies
-//
-//	Default:   utls (Tor team) + x/net/http2 (Go team) + stdlib  ← ZERO FORK
-//	+h3:       + quic-go-utls (bogdanfinn fork, QUIC mandates this)
-//	+fhttp:    + fhttp (bogdanfinn fork, for Akamai-grade H2 control)
+//	tr := tlsgateway.NewTransport(profile)
+//	client := &http.Client{
+//	    Transport: tlsgateway.NewHeaderRoundTripper(tr, profile),
+//	}
 package tlsgateway
