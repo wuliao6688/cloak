@@ -17,8 +17,20 @@
 | `transport_race.go` | RaceTransport: H2 vs H1.1 Protocol Racing |
 | `impersonate.go` | Impersonate/ImpersonateChain/SelfCheck/DumpFingerprint |
 | `header.go` | HeaderRoundTripper: 按画像注入浏览器 UA/Accept |
+| `fingerprint.go` | H2类型/H2默认值/Header排序/Multipart边界 |
 | `middleware.go` | TransportMiddleware: 链式包装 Debug/UA/Tracing |
 | `proxy.go` | HTTP/HTTPS 正向代理 (CONNECT 隧道) |
+
+### internal/header
+
+| 文件 | 职责 |
+|------|------|
+| `header.go` | HeaderOderKey/PseudoHeaderOrderKey/SortKeyValues/IsExcluded |
+| `sort_test.go` | 排序正确性+模糊测试 |
+
+借鉴 req 的 `__header_order__` / `__pseudo_header_order__` 模式:
+H2 伪头和常规头顺序通过特殊 HTTP header 传递,
+H2 transport 编码时读取并排序后从 wire 上剥离。
 
 ### 快速使用
 
