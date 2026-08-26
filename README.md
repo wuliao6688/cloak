@@ -1,112 +1,77 @@
-# tlsgateway — Go HTTP 客户端指纹伪装库
+# tls-client
 
-[![Go Version](https://img.shields.io/badge/Go-1.22+-blue)](https://go.dev)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+Go 语言的浏览器指纹 HTTP 客户端 —— **TLS 1.3 + HTTP/2 + HTTP/3 三层指纹全覆盖**，
+让服务端无法区分你的请求和真实浏览器。
 
-tlsgateway 是一个 Go HTTP 客户端库，专注于 **TLS/HTTP 指纹伪装**——让 Go 程序的 HTTP 请求看起来像真实的浏览器。
+```
+go get github.com/bogdanfinn/tls-client
+```
 
-> **核心理念**：仅使用 uTLS (Tor 团队) + x/net/http2 (Go 官方) + 标准库。零外部 fork 依赖。
+## 为什么用它
 
-## 快速开始
+| 能力 | tls-client | 上游 bogdanfinn | curl_cffi | imroc/req |
+|---|---|---|---|---|
+| TLS 指纹（JA3/JA4） | ✅ 77 画像 | ✅ | ✅ | ⚠️ 有限 |
+| HTTP/2 指纹（SETTINGS/伪头/优先级） | ✅ 完整定制 | ✅ | ✅ | ❌ |
+| **HTTP/3 指纹（QUIC TLS + H3 SETTINGS）** | ✅ **全链路** | ⚠️ QUIC TLS 层是 Go 默认 | ⚠️ 仅部分 | ❌ |
+| **H2 vs H3 协议赛跑** | ✅ Chrome 式 | ✅ | ✅ | ❌ |
+| 零 fork 依赖（标准 net/http） | ✅ | ❌ 依赖 fhttp | ❌ C 扩展 | ✅ |
+| 移动端画像 | ✅ OkHttp/Nike/Zalando | ❌ | ❌ | ❌ |
+| 内置正向代理 | ✅ | ❌ | ❌ | ❌ |
+
+**关键差异**：上游和 curl_cffi 的 H3 只做了 HTTP/3 应用层指纹（SETTINGS 帧），
+QUIC TLS 握手层仍是 Go/curl 默认指纹——**tls-client 通过 UQUICClient 把浏览器
+ClientHello 注入 QUIC TLS 握手**，是唯一三层指纹全对齐的实现。
+
+## 快速上手
 
 ```go
-// 一行代码伪装 Chrome，通过 Akamai
-client := tlsgateway.Impersonate(profiles.Chrome_150)
-resp, _ := client.Get("https://www.akamai.com/") // → 200
+package main
 
-// DevMode: 伪装 + 调试 一行搞定
-tlsgateway.DevMode(profiles.Chrome_150).Get("https://api.example.com")
+import (
+	"fmt"
 
-// 自动反序列化 + 重试 + dump
-var user User
-tlsgateway.ImpersonateRequest(profiles.Chrome_150).
-    SetSuccessResult(&user).
-    SetBearerAuthToken("secret").
-    SetRetry(3, tlsgateway.RetryOnServerError, 1*time.Second, 10*time.Second).
-    SetDump(tlsgateway.DefaultDumpOptions()).
-    Get("https://api.example.com/user")
-```
+	"github.com/bogdanfinn/tls-client/profiles"
+	"github.com/bogdanfinn/tls-client/tlsgateway"
+)
 
-## 压力测试验证
+func main() {
+	// 普通模式：TLS + HTTP/2 指纹
+	client := tlsgateway.Impersonate(profiles.Chrome_150)
+	resp, _ := client.Get("https://www.akamai.com/")
+	fmt.Println(resp.StatusCode) // 200
 
-```
-10 分钟高并发压测 (20 并发，Akamai/Cloudflare/tls.peet.ws):
-  ├── 总请求: 14,000+
-  ├── 成功率: 100%
-  ├── Akamai 200: 100%
-  ├── 内存: 3.6-3.9 MB (无增长)
-  ├── Goroutines: 102 (无泄漏)
-  └── 结论: ✅ 稳定可靠，零泄漏
-```
-
-## 为什么选 tlsgateway？
-
-| | 标准 `net/http` | tlsgateway |
-|---|---|---|
-| TLS 指纹 | Go 默认（易检测） | Chrome/Firefox/Safari (uTLS) |
-| H2 SETTINGS 定制 | ❌ | ✅ Chrome/Firefox/Safari |
-| 浏览器头 | 手动 | 自动注入 (UA/Accept/Sec-CH-UA) |
-| Akamai | ❌ 403 | ✅ 200 |
-| Cloudflare | ❌ 1020 | ✅ |
-
-## 验证结果
-
-| 平台 | 结果 |
-|------|------|
-| tls.peet.ws | ✅ JA3/JA4 正确 |
-| cloudflare.com | ✅ TLSv1.3+HTTP/2 |
-| imperva.com | ✅ |
-| f5.com | ✅ |
-| hcaptcha.com | ✅ |
-| recaptcha-demo | ✅ |
-| sannysoft.com | ✅ PASS |
-| **akamai.com** | ✅ **200** |
-
-TLS 层 100%，6 大 WAF 全通过。
-
-## 功能
-
-- **TLS 指纹**: 77 画像，覆盖 Chrome/Firefox/Safari/Brave/Opera/移动端
-- **HTTP/2 指纹**: SETTINGS/StreamID/ConnectionFlow/Priority 帧
-- **HTTP/3 指纹** 🔥: QUIC TLS ClientHello 注入 (UQUICClient) + H3 SETTINGS/GREASE/Priority/伪头顺序——**超越上游**（上游 QUIC TLS 层是 Go 默认指纹）
-- **H2 vs H3 协议赛跑**: `ImpersonateH3()` / `ChainBuilder.EnableH3()`，Chrome 式 Happy Eyeballs + 域名级协议缓存，无 QUIC 自动降级 H2/H1
-- **浏览器头**: 自动注入 UA/Accept/Sec-CH-UA/Accept-Language
-- **Header 排序**: Chrome/Firefox/Safari 规范顺序
-- **自动反序列化**: `SetSuccessResult(&v)` → 响应自动 JSON unmarshal
-- **自动重试**: 条件重试 + 指数退避
-- **DevMode**: 一行调试
-- **TraceInfo**: DNS/TCP/TLS/FirstByte 等 7 点计时
-- **TransportMiddleware**: 链式包装
-- **正向代理**: HTTP/HTTPS CONNECT 隧道
-
-## 快速使用 H3
-
-```go
-// H3 racing: 优先 HTTP/3,无 QUIC 自动降级 H2/H1
-client := tlsgateway.ImpersonateH3(profiles.Chrome_150)
-resp, _ := client.Get("https://www.cloudflare.com/cdn-cgi/trace") // http=http/3
-
-// 或链式配置
-client := tlsgateway.ImpersonateChain(profiles.Chrome_150).EnableH3().Build()
+	// H3 模式：HTTP/3 (QUIC) 优先，自动降级 H2
+	client3 := tlsgateway.ImpersonateH3(profiles.Chrome_150)
+	resp, _ = client3.Get("https://www.cloudflare.com/cdn-cgi/trace")
+	// 响应头里会看到 http=http/3
+}
 ```
 
 ## 文档
 
 | 文档 | 内容 |
-|------|------|
-| [快速开始](docs/quick-start.md) | 5 分钟上手 |
-| [TLS 指纹](docs/tls-fingerprint.md) | 原理/使用/验证/FAQ |
-| [HTTP 指纹](docs/http-fingerprint.md) | H2 完整定制/Chrome vs Firefox vs Safari |
-| [画像论证](docs/profile-audit.md) | 77 画像数据来源与正确性论证 |
-| [H3 优化方案](docs/optimization-h3.md) | H3 能力补全方案论证 |
-| [API 速览](docs/api.md) | 所有 API |
-| [架构设计](docs/architecture.md) | 分层/双Transport/设计决策 |
+|---|---|
+| [概览](docs/overview.md) | 项目是什么、能力矩阵、设计哲学 |
+| [快速开始](docs/quick-start.md) | 5 分钟上手：请求/反序列化/重试/调试 |
+| [API 参考](docs/api.md) | 全部公开 API 速查 |
+| [指纹体系](docs/fingerprint.md) | TLS/HTTP2/HTTP3 三层指纹原理与实现 |
+| [HTTP/3 指南](docs/h3.md) | QUIC 能力详解、H3 racing、与上游差异 |
+| [画像体系](docs/profiles.md) | 77 个预置画像清单、数据来源论证 |
+| [验证矩阵](docs/verification.md) | 14 平台验证 + 客户场景测试 + 修复记录 |
+| [架构设计](docs/architecture.md) | 分层、设计决策、目录结构 |
 
-## 安装
+## 验证基线
 
-```bash
-go get github.com/bogdanfinn/tls-client
 ```
+go test -race -count=1 ./...        # 全部测试（含并发/H3/画像有效性）
+go run ./cmd/verify-fingerprints    # 14 平台指纹验证
+go run ./cmd/stress 10m             # 10 分钟压力测试
+```
+
+- 12 个 TLS/WAF 平台 + 2 个 HTTP/3 平台
+- Akamai / Cloudflare / Imperva / F5 / DataDome / HCaptcha / reCAPTCHA / Sannysoft
+- 100 并发稳定性、goroutine 零泄漏、内存 3.6-4.0 MB 无增长
 
 ## License
 

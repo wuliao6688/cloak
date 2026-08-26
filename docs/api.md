@@ -1,94 +1,175 @@
-# API 速览
+# API 参考
 
-## Client 创建
+所有公开 API 速查。包路径：`github.com/bogdanfinn/tls-client/tlsgateway`（核心）和
+`github.com/bogdanfinn/tls-client/profiles`（画像）。
 
-```go
-// 简化 API（自动 TLS + HTTP 指纹）
-client := tlsgateway.Impersonate(profile)            // *http.Client
-req   := tlsgateway.ImpersonateRequest(profile)       // *Request
-builder := tlsgateway.ImpersonateChain(profile)       // *ChainBuilder
+## 1. 入口函数
 
-// 链式 API
-client := tlsgateway.ImpersonateChain(profile).
-    SetUserAgent("custom/1.0").
-    SetDebug(os.Stderr).
-    SetTimeout(30 * time.Second).
-    WithOrderedHeaders().
-    Build()
-```
+| 函数 | 说明 |
+|---|---|
+| `Impersonate(profile) *http.Client` | 标准客户端：TLS + HTTP/2 指纹 + 浏览器头 |
+| `ImpersonateH3(profile) *http.Client` | H3 racing 客户端：HTTP/3 优先，自动降级 |
+| `ImpersonateChain(profile) *ChainBuilder` | 链式配置入口 |
+| `ImpersonateRequest(profile) *Request` | 请求级 builder（无需先建 client） |
+| `DevMode(profile) *http.Client` | 调试模式（完整 dump 到 stderr） |
+| `NewTransport(profile) *Transport` | 底层 Transport |
+| `NewTransportWithOptions(profile, TransportOptions) *Transport` | 带选项 |
+| `NewH3Transport(profile) *H3Transport` | 纯 H3 RoundTripper |
+| `NewH3RaceTransport(profile) *H3RaceTransport` | H3 racing RoundTripper |
+| `NewRaceTransport(profile) *RaceTransport` | H2 vs H1 racing（无 H3） |
+| `NewFingerprintTransport(profile) *FingerprintTransport` | 底层（fork http2） |
+| `NewProxy(addr, profile) *Proxy` | 本地正向代理 |
+| `NewMiddlewareChain(...) *MiddlewareChain` | 中间件链 |
+| `NewHeaderRoundTripper(transport, profile)` | 浏览器头包装器 |
 
-## Transport
-
-```go
-tr := tlsgateway.NewTransport(profile)               // 默认 (x/net/http2)
-tr := tlsgateway.NewFingerprintTransport(profile)     // 完整 H2 指纹
-
-tr.SetProfile(newProfile)
-tr.SetDebug(os.Stderr)
-wrapped := tr.Wrap(
-    tlsgateway.DebugMiddleware(logFunc),
-    tlsgateway.UserAgentMiddleware("custom/1.0"),
-)
-```
-
-## Request
+## 2. TransportOptions
 
 ```go
-req := tlsgateway.ImpersonateRequest(profile)
-req.SetHeader("Authorization", "Bearer xxx")
-req.SetSuccessResult(&result)          // 2xx 自动 JSON unmarshal
-req.SetErrorResult(&errResp)           // 非2xx 自动 unmarshal
-req.SetDump(tlsgateway.DefaultDumpOptions())
-req.SetRetry(3, condition, 1*time.Second, 10*time.Second)
-
-resp, err := req.Get("https://api.example.com")
+type TransportOptions struct {
+	RandomExtensionOrder bool                        // 随机 TLS 扩展顺序
+	ServerNameOverwrite  string                      // SNI 覆盖
+	Proxy                func(*http.Request) (*url.URL, error) // HTTP 代理
+	InsecureSkipVerify   bool                        // 跳过证书验证
+}
 ```
 
-## Response
+## 3. ChainBuilder（ImpersonateChain 返回值）
 
-```go
-resp.StatusCode
-resp.BodyBytes()                    // 缓存响应体
-resp.UnmarshalJson(&v)
-resp.UnmarshalXml(&v)
-resp.IsSuccess()                    // 2xx?
-resp.SuccessResult()                // 自动填充的成功结果
-resp.ErrorResult()                  // 自动填充的错误结果
-resp.Trace.TotalTime                // 请求总耗时
-resp.Trace.DNSLookupTime
-resp.Trace.TCPConnectTime
-resp.Trace.TLSHandshakeTime
-resp.Trace.FirstResponseTime
-resp.Trace.IsConnReused
-```
+| 方法 | 说明 |
+|---|---|
+| `SetUserAgent(ua)` | 覆盖 UA |
+| `SetHeader(k, v)` | 加自定义头 |
+| `SetTimeout(d)` | 超时 |
+| `SetDebug(w)` | 调试输出 |
+| `EnableH3()` | **启用 HTTP/3 racing** |
+| `WithOrderedHeaders()` | H1 头排序 |
+| `SetH2Fingerprint(fp)` / `WithH2Fingerprint(fp)` | 自定义 H2 指纹 |
+| `AsChrome() / AsFirefox() / AsSafari() / AsEdge() / AsQQ() / As360() / AsAndroid() / AsIOS()` | 预设浏览器指纹 |
+| `AsRandom()` | 随机指纹 |
+| `Build() *http.Client` | 构建 |
+| `Transport() *Transport` | 取底层 Transport |
 
-## 指纹
+## 4. Transport
 
-```go
-info, _ := tlsgateway.SelfCheck(profile)    // JA3+JA4
-tlsgateway.DumpFingerprint(profile)
-fp := tlsgateway.BrowserFingerprint(name)
-// fp.Settings, fp.InitialStreamID, fp.ConnectionFlow, ...
-```
+| 方法 | 说明 |
+|---|---|
+| `RoundTrip(req)` | 实现 http.RoundTripper，自动协商 H2/H1 |
+| `SetProfile(profile)` | 动态切换画像 |
+| `SetRandomExtensionOrder(bool)` | 随机扩展顺序 |
+| `SetInsecureSkipVerify(bool)` | 跳过证书验证 |
+| `SetDebug(w)` | 调试输出 |
+| `SelfCheck(url) FingerprintInfo` | 自检 TLS 指纹（JA3/JA4） |
+| `DialTLS(ctx, network, addr)` | 原始 uTLS 连接（CONNECT 用） |
+| `Wrap(middleware...) *Transport` | 应用中间件 |
+| `CloseIdleConnections()` | 关闭空闲连接 |
 
-## Debug & Dump
+## 5. Request（请求级 builder）
 
-```go
-tr.SetDebug(os.Stderr)
-opts := tlsgateway.FullDumpOptions()
-req.SetDump(opts)
-```
+### 执行
 
-## Retry
+| 方法 | 说明 |
+|---|---|
+| `Get(url) (*Response, error)` | GET |
+| `Post(url) (*Response, error)` | POST |
 
-```go
-tlsgateway.RetryOnServerError
-tlsgateway.RetryOnAnyError
-```
+### 配置
 
-## Proxy
+| 方法 | 说明 |
+|---|---|
+| `SetHeader(k, v)` / `SetHeaders(map)` | 请求头 |
+| `SetHeaderNonCanonical(k, v)` | 精确大小写头（指纹相关） |
+| `SetCommonHeaders(map)` | 通用头 |
+| `SetBody(io.Reader)` / `SetBodyString(s)` / `SetBodyBytes(b)` | 请求体 |
+| `SetOrderedFormData(kvs...)` | 有序表单（字段顺序=指纹） |
+| `SetQueryParam(k, v)` / `SetQueryParams(map)` | 查询参数 |
+| `SetCommonQueryParams(map)` | 通用查询参数 |
+| `SetPathParam(k, v)` / `SetPathParams(map)` | REST 路径参数 |
+| `SetBaseURL(base)` | 基础 URL |
+| `SetCookies(cookies...)` | Cookie |
+| `SetBasicAuth(u, p)` / `SetBearerAuthToken(t)` | 认证 |
+| `SetInsecureSkipVerify(bool)` | 跳过证书验证（穿透包装链） |
 
-```go
-proxy := tlsgateway.NewProxy(profile)
-proxy.ListenAndServe(":8080")
-```
+### 结果处理
+
+| 方法 | 说明 |
+|---|---|
+| `SetSuccessResult(&v)` | 2xx 自动 JSON → v |
+| `SetErrorResult(&v)` | 非 2xx 自动 JSON → v |
+| `SetRetry(count, cond, min, max)` | 条件重试 + 指数退避 |
+| `SetDump(opts)` | 请求/响应 dump |
+| `SetOutputFile(path)` | 响应落盘 |
+| `SetOutput(io.Writer)` | 响应写流 |
+| `OnRequest(fn)` | 请求前钩子 |
+| `OnResponse(fn)` | 响应后钩子 |
+
+### 重试条件
+
+| 常量 | 说明 |
+|---|---|
+| `RetryOnAnyError` | 任何错误都重试 |
+| `RetryOnServerError` | 5xx 重试 |
+| `GetRetryIntervalFunc` | 自定义退避 |
+
+## 6. Response
+
+| 方法 | 说明 |
+|---|---|
+| `String() / ToString() / Bytes() / BodyBytes()` | 响应体 |
+| `SuccessResult() / ErrorResult()` | 反序列化结果 |
+| `IsSuccess() / IsError()` | 状态判断 |
+| `ResultState()` | 结果状态 |
+| `UnmarshalJson(&v) / UnmarshalXml(&v) / UnmarshalErr(&v)` | 手动反序列化 |
+| `Trace` | TraceInfo（DNS/TCP/TLS/FirstByte 七点计时） |
+
+## 7. HTTP/3
+
+| 类型/方法 | 说明 |
+|---|---|
+| `H3Transport` | 纯 H3 RoundTripper（`RoundTrip`/`SetProfile`/`SetDebug`） |
+| `H3RaceTransport` | H3 vs H2 racing（`RoundTrip`/`SetProfile`/`CloseIdleConnections`） |
+| `NewH3TransportWithOptions(profile, opts)` | 带选项构造 |
+| `NewH3RaceTransportWithOptions(profile, opts, raceOpts)` | 带选项 + race 选项 |
+| `RaceOptions` | `Timeout` / `H2Delay` 配置 |
+| `DefaultRaceOptions()` | 默认 race 选项 |
+
+## 8. 中间件
+
+| 类型 | 说明 |
+|---|---|
+| `Middleware` | `func(http.RoundTripper) http.RoundTripper` |
+| `MiddlewareChain` | `.Use(m1, m2...)` / `.Build()` |
+| `DebugMiddleware` | 调试中间件 |
+| `UserAgentMiddleware(ua)` | UA 中间件 |
+
+## 9. Proxy（正向代理）
+
+| 方法 | 说明 |
+|---|---|
+| `NewProxy(addr, profile) *Proxy` | 创建 |
+| `ListenAndServe() error` | 启动 |
+| `Shutdown(ctx)` | 优雅关闭 |
+| `SetProfile(profile)` | 动态切换画像 |
+| `SetInsecureSkipVerify(bool)` | 跳过证书验证 |
+
+## 10. profiles 包
+
+| API | 说明 |
+|---|---|
+| `profiles.Chrome_150`（等 77 个画像常量） | 浏览器画像 |
+| `profiles.AllClientProfiles() map[string]ClientProfile` | 全部画像 |
+| `profiles.ResolveClientProfileStrict(key) (ClientProfile, error)` | 按 key 解析 |
+| `profiles.NewClientProfile(...)` | 自定义画像 |
+| `profiles.DefaultClientProfile` | 默认画像 |
+| `profiles.ErrUnknownClientProfile` | 未知画像错误 |
+| `profiles.MappedTLSClients` | 兼容映射 |
+| `ClientProfile` 的 `GetXxx()` 系列 | 画像字段读取 |
+
+## 11. 指纹工具
+
+| API | 说明 |
+|---|---|
+| `BrowserFingerprint(name) *H2Fingerprint` | 浏览器 H2 指纹 |
+| `RandomFingerprint()` | 随机指纹 |
+| `DumpFingerprint(...)` | 导出指纹 |
+| `ChromeMultipartBoundary()` / `FirefoxMultipartBoundary()` | multipart 边界 |
+| `H2Fingerprint` / `H2Setting` / `H2SettingID` / `PriorityFrame` / `PriorityParam` | H2 指纹类型 |

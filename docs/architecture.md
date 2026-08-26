@@ -1,106 +1,182 @@
 # 架构设计
 
-## 依赖策略
+## 目录结构
 
-**零外部 fork**：默认构建仅用 uTLS (Tor 团队) + x/net/http2 (Go 官方) + 标准库。
-
-不依赖 bogdanfinn/fhttp、bogdanfinn/quic-go-utls 等上游库。
+```
+tls-client/
+├── tlsgateway/              ← 核心库（全部公开 API）
+│   ├── impersonate.go       ← 入口：Impersonate/ChainBuilder/DevMode
+│   ├── request.go           ← 请求级 builder（req 风格）
+│   ├── response.go          ← Response + ResultState + TraceInfo
+│   ├── transport_h2.go      ← Transport（一体式：TLS + H2/H1 + 浏览器头）
+│   ├── transport_h3.go      ← H3Transport（纯 QUIC RoundTripper）
+│   ├── transport_h3race.go  ← H3RaceTransport（H3 vs H2 赛跑）
+│   ├── transport_race.go    ← RaceTransport（H2 vs H1 赛跑，无 H3）
+│   ├── transport_fprint.go  ← FingerprintTransport（fork http2 底层）
+│   ├── fingerprint.go       ← H2 指纹 / 浏览器常量 / 头排序
+│   ├── header.go            ← HeaderRoundTripper（浏览器头注入）
+│   ├── middleware.go        ← 中间件链
+│   ├── retry.go             ← 条件重试 + 指数退避
+│   ├── dump.go              ← 请求/响应 dump
+│   ├── proxy.go             ← 本地正向代理
+│   └── *_test.go            ← 测试
+├── profiles/                ← 77 画像
+│   ├── internal_browser_profiles.go   ← Chrome/Safari/Firefox/Opera/Brave
+│   ├── contributed_browser_profiles.go ← 更多浏览器版本
+│   ├── internal_custom_profiles.go    ← OkHttp/移动端
+│   ├── contributed_custom_profiles.go ← Nike/Zalando/Mesh 等
+│   ├── profiles.go          ← 注册表 + NewClientProfile
+│   ├── resolver.go          ← key 解析
+│   ├── metadata.go          ← 画像元数据
+│   └── h2settings.go        ← H2 SETTINGS 定义
+├── internal/
+│   ├── http2/               ← x/net/http2 fork（SETTINGS/StreamID/Priority 定制）
+│   ├── httpcommon/          ← 共享 HTTP 公共代码
+│   └── header/              ← 头排序辅助
+├── third_party/
+│   └── quic-go-utls/        ← quic-go fork（UQUICClient 指纹注入 + H3）
+├── cmd/
+│   ├── verify-fingerprints/ ← 14 平台指纹验证工具
+│   ├── stress/              ← 压力测试工具
+│   ├── tlsgateway-proxy/    ← 代理服务（画像热加载）
+│   └── export-profiles/     ← 画像导出工具
+├── docs/                    ← 文档
+├── README.md
+└── go.mod
+```
 
 ## 分层架构
 
 ```
-┌─────────────────────────────────┐
-│  tlsgateway/                    │  ← 用户层
-│  ├── impersonate.go   API入口    │
-│  ├── request.go       Request   │
-│  ├── response.go      Response  │
-│  ├── retry.go         重试       │
-│  ├── dump.go          调试       │
-│  ├── fingerprint.go   指纹数据   │
-│  ├── header.go        头像注入   │
-│  ├── middleware.go     中间件    │
-│  ├── transport_h2.go  Transport │
-│  ├── transport_fprint.go FPrint │
-│  └── proxy.go         代理      │
-├─────────────────────────────────┤
-│  internal/                      │  ← 基础设施层
-│  ├── http2/         x/net fork  │
-│  ├── httpcommon/    httpcommon  │
-│  └── header/        SortKeyVals │
-├─────────────────────────────────┤
-│  profiles/                      │  ← 画像层
-│  └── 81 预置画像                 │
-└─────────────────────────────────┘
+┌────────────────────────────────────────────────┐
+│ 公开 API 层                                      │
+│  Impersonate / ImpersonateH3 / ImpersonateChain │
+│  ImpersonateRequest / DevMode / NewProxy        │
+├────────────────────────────────────────────────┤
+│ 请求层 (req 风格)                                │
+│  Request builder → Response / ResultState       │
+│  重试 / 中间件 / dump / 反序列化 / 输出落盘       │
+├────────────────────────────────────────────────┤
+│ 传输层 (RoundTripper)                           │
+│  Transport (H2+H1) │ H3Transport │ H3RaceTransport│
+│  RaceTransport    │ FingerprintTransport        │
+├────────────────────────────────────────────────┤
+│ 指纹层                                           │
+│  uTLS (TLS) │ internal/http2 (H2) │ quic-go-utls (H3)│
+├────────────────────────────────────────────────┤
+│ 数据层                                           │
+│  profiles: 77 画像 (TLS Spec + H2 + H3 字段)    │
+└────────────────────────────────────────────────┘
 ```
 
-## 双 Transport 设计
+## 核心设计决策
 
-| | 默认 Transport | FingerprintTransport |
-|---|---|---|
-| HTTP/2 实现 | x/net/http2 (Go 官方) | internal/http2 (fork) |
-| H2 SETTINGS | Go 默认 | Chrome/Firefox 浏览器值 |
-| Stream ID | 1 | 3 (Chrome) / 1 (Firefox) |
-| ConnectionFlow | Go 默认 | 浏览器值 |
-| Priority 帧 | 无 | Firefox 6 个 |
-| 依赖 | 零 fork | fork x/net/http2 |
+### 1. 一体式 Transport（TLS + HTTP 头 + 协议协商）
 
-选择建议：
-- **默认 Transport** — 大多数场景，TLS + HTTP 头伪装已足够
-- **FingerprintTransport** — 严格 H2 指纹检测的场景
+`Transport` 一个对象完成所有事：
+- uTLS 握手（按画像构造 ClientHello）
+- HTTP/2 vs HTTP/1.1 自动协商（按域名缓存）
+- 浏览器头自动注入（UA / Accept / Sec-CH-UA / Accept-Language）
 
-## 关键设计决策
-
-### 1. HeaderRoundTripper（解决 Akamai）
-
-Akamai 在 TLS 层通过后，还检查 HTTP 头。单纯 uTLS 过 TLS 但返回 403。
-
-**方案**：`HeaderRoundTripper` 按画像注入浏览器整套头部（UA/Accept/Sec-Ch-Ua 等）。
-Akamai: 403 → 200。
-
-### 2. __header_order__ trick（借鉴 req）
-
-H2 伪头顺序控制通过特殊 HTTP header 传递：
-
-```
-req.Header.Set("__pseudo_header_order__", ":method,:authority,:scheme,:path")
-```
-
-H2 transport 编码时读取并排序后从 wire 剥离。不污染公开 API。
-
-### 3. BrowserFingerprint（一站式指纹）
-
-`BrowserFingerprint(name)` 根据 profile 名自动返回对应浏览器的全部指纹维度：
-Settings、StreamID、ConnectionFlow、HeaderPriority、PriorityFrames、PseudoHeaderOrder、HeaderOrder、Headers。
-
-### 4. H2→H1 降级
-
-对不支持 H2 的服务器（或 Akamai 拒绝 H2 的情况），自动降级到 H1.1。
-
-### 5. 指数退避重试
+**为什么**：早期架构用 `HeaderRoundTripper` 包装，但用户经常忘记包装导致
+头不一致。一体式保证"选了 Chrome 画像就一定发 Chrome 的头"。
 
 ```go
-// 第 1 次重试: 1s
-// 第 2 次重试: 2s
-// 第 3 次重试: 4s
-// max: 10s
+type Transport struct {
+	profile       profiles.ClientProfile // 当前画像
+	h2            *http2.Transport       // fork 的 H2
+	h1            *http.Transport        // H1.1（ALPN 强制 http/1.1）
+	h1p           *http.Transport        // 纯明文 HTTP
+	browserHeaders map[string]string     // 画像浏览器头
+	protocolCache  sync.Map              // host → h2/h1 缓存
+}
 ```
 
-## 文件清单
+### 2. 零 fork 依赖（默认构建）
 
-| 文件 | 行数 | 职责 |
-|------|------|------|
-| impersonate.go | ~300 | Impersonate/ImpersonateChain/ImpersonateRequest/SelfCheck |
-| transport_h2.go | ~300 | 默认 Transport (x/net/http2) |
-| transport_fprint.go | ~230 | FingerprintTransport (fork http2) |
-| fingerprint.go | ~380 | H2指纹类型/浏览器常量/Header排序/Multipart |
-| request.go | ~170 | Request 流式 builder |
-| response.go | ~110 | Response + TraceInfo + auto-unmarshal |
-| header.go | ~100 | HeaderRoundTripper |
-| middleware.go | ~120 | TransportMiddleware |
-| retry.go | ~30 | 条件重试 + 退避 |
-| dump.go | ~95 | DumpOptions 维度控制 |
-| proxy.go | ~250 | HTTP/HTTPS 正向代理 |
-| internal/http2/ | ~3400 | x/net/http2 fork |
-| internal/httpcommon/ | ~1200 | httpcommon |
-| internal/header/ | ~70 | SortKeyValues/HeaderOrderKey |
-| profiles/ | ~2000 | 81 预置画像 |
+默认构建只用 `uTLS` + `golang.org/x/net` + 标准库。internal/http2 是
+x/net 的 fork（定制 SETTINGS/StreamID/Priority），但 API 兼容。
+
+H3 是例外：QUIC 是全新协议栈，必须引入 quic-go。放在 `third_party/`
+（go.mod replace 指向本地 fork），核心 QUIC 层不依赖 fhttp。
+
+### 3. H3 指纹注入（UQUICClient）
+
+上游 bogdanfinn 的 H3 用标准 `QUICClient`——QUIC TLS 层是 Go 默认指纹。
+本项目 fork quic-go-utls 后改用 `UQUICClient + HelloCustom + ApplyPreset`，
+把浏览器 ClientHello 注入 QUIC TLS 握手（详见 [HTTP/3 指南](h3.md)）。
+
+### 4. 协议赛跑（Chrome Happy Eyeballs）
+
+```
+首次请求 → H3 + H2 并行 → 先成功者胜 → 按域名缓存
+后续请求 → 直接用缓存协议
+H3 失败 → 缓存 h2 → 之后全走 H2
+非幂等方法 → 绝不并发（只走缓存协议）
+```
+
+### 5. 画像注册表
+
+```go
+// profiles/profiles.go
+var canonicalTLSClients = map[string]ClientProfile{  // 不可变注册表
+	"chrome_150":  Chrome_150,
+	"firefox_147": Firefox_147,
+	// ... 77 个
+}
+```
+
+- 注册表**不可变**（防止外部修改影响全局解析）
+- `AllClientProfiles()` 返回防御性副本
+- Getter 返回 `maps.Clone` / `slices.Clone` 副本（防并发写）
+
+## 关键流程
+
+### 请求生命周期
+
+```
+Request.Get(url)
+  → buildURL()（baseURL + pathParams + queryParams）
+  → 注入请求头（SetHeader 优先 > 通用头 > 浏览器默认）
+  → 中间件链（OnRequest）
+  → Transport.RoundTrip
+      → 协议缓存命中？→ 直接走 h2/h1
+      → 未命中 → 尝试 h2 → 失败降级 h1 → 缓存
+      → TLS 握手（uTLS 按画像）→ H2 SETTINGS 注入
+  → 响应处理（gzip 解压 / 反序列化 / dump / 输出）
+  → OnResponse 中间件
+  → Response（含 TraceInfo 七点计时）
+```
+
+### H3 racing 流程
+
+```
+H3RaceTransport.RoundTrip
+  → https? + 幂等方法?（否则走 base）
+  → 协议缓存命中 → 走 h3 / h2
+  → 未命中 → race():
+      H3 goroutine（req.Clone）
+      H2 goroutine（req.Clone, H2Delay 后启动）
+      谁先成功 → 缓存协议 → 返回
+      都失败 → 返回 H2 错误
+```
+
+## 依赖
+
+| 依赖 | 用途 | 是否 fork |
+|---|---|---|
+| `github.com/bogdanfinn/utls` | TLS 指纹 | 否（Tor 团队） |
+| `golang.org/x/net` | HTTP/2（源） | 否 |
+| `internal/http2` | H2 指纹定制 | ✅ fork（API 兼容） |
+| `third_party/quic-go-utls` | QUIC + H3 | ✅ fork（UQUICClient 注入） |
+| `github.com/quic-go/qpack` | H3 QPACK | 否 |
+
+## 与上游的架构差异
+
+| | 本项目 | 上游 bogdanfinn |
+|---|---|---|
+| H3 QUIC TLS 指纹 | ✅ UQUICClient 注入 | ❌ Go 默认 |
+| HTTP 库 | 标准 net/http | fhttp（net/http fork） |
+| 浏览器头 | Transport 内置 | HeaderRoundTripper 包装 |
+| 代理 | ✅ 内置 | ❌ |
+| API 风格 | req 风格链式 | 配置对象 |

@@ -1,6 +1,7 @@
 # 快速开始
 
-5 分钟上手 tlsgateway，让你的 Go 程序请求看起来像浏览器。
+5 分钟上手 tls-client。核心入口就三个：`Impersonate`（标准）、`ImpersonateH3`（QUIC）、
+`ImpersonateRequest`（链式 builder）。
 
 ## 1. 安装
 
@@ -8,107 +9,123 @@
 go get github.com/bogdanfinn/tls-client
 ```
 
-## 2. 一行代码伪装 Chrome
+需要 Go 1.26+（项目在 Go 1.26.5 上开发测试）。
+
+## 2. 一行代码伪装浏览器
 
 ```go
 package main
 
 import (
-    "fmt"
-    "github.com/bogdanfinn/tls-client/profiles"
-    "github.com/bogdanfinn/tls-client/tlsgateway"
+	"fmt"
+
+	"github.com/bogdanfinn/tls-client/profiles"
+	"github.com/bogdanfinn/tls-client/tlsgateway"
 )
 
 func main() {
-    client := tlsgateway.Impersonate(profiles.Chrome_150)
-    resp, _ := client.Get("https://www.akamai.com/")
-    fmt.Println(resp.StatusCode) // 200
+	// 用 Chrome 150 的完整指纹（TLS + HTTP/2）
+	client := tlsgateway.Impersonate(profiles.Chrome_150)
+
+	resp, err := client.Get("https://www.akamai.com/")
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	fmt.Println(resp.StatusCode) // 200
 }
 ```
 
-## 3. 自动反序列化 + 重试 + 调试
+选画像：`profiles.Chrome_150` / `Firefox_147` / `Safari_IOS_18_0` /
+`Okhttp4Android13` / `Brave_146`……共 77 个（见 [画像体系](profiles.md)）。
+
+## 3. HTTP/3（QUIC）模式
+
+```go
+// H3 racing：优先 HTTP/3，服务器不支持 QUIC 时自动降级 HTTP/2
+client := tlsgateway.ImpersonateH3(profiles.Chrome_150)
+
+resp, _ := client.Get("https://www.cloudflare.com/cdn-cgi/trace")
+// 响应体里 http=http/3 表示成功走了 QUIC
+```
+
+## 4. 链式 builder（推荐）
+
+```go
+client := tlsgateway.ImpersonateChain(profiles.Chrome_150).
+	EnableH3().                    // 启用 H3 racing（可选）
+	SetUserAgent("Mozilla/5.0 ..."). // 覆盖 UA
+	SetHeader("X-Custom", "v1").   // 加自定义头
+	SetTimeout(15 * time.Second).  // 超时
+	SetDebug(os.Stderr).           // 打印请求/响应
+	Build()
+```
+
+## 5. 请求级 API：反序列化 + 重试 + 调试
 
 ```go
 type User struct {
-    Name string `json:"name"`
+	Name string `json:"name"`
 }
-
 var user User
 var apiErr struct{ Message string `json:"message"` }
 
 resp, err := tlsgateway.ImpersonateRequest(profiles.Chrome_150).
-    SetSuccessResult(&user).                         // 自动 JSON unmarshal
-    SetErrorResult(&apiErr).                         // 错误时自动 unmarshal
-    SetRetry(3, tlsgateway.RetryOnServerError,       // 重试 3 次
-        1*time.Second, 10*time.Second).              // 退避 1s-10s
-    SetDump(tlsgateway.DefaultDumpOptions()).        // 打印请求响应头
-    Get("https://api.example.com/user")
+	SetSuccessResult(&user).                        // 2xx 自动 JSON → user
+	SetErrorResult(&apiErr).                        // 非 2xx 自动 JSON → apiErr
+	SetRetry(3, tlsgateway.RetryOnServerError,      // 重试 3 次
+		1*time.Second, 10*time.Second).          // 退避 1s-10s
+	SetDump(tlsgateway.DefaultDumpOptions()).       // 打印请求/响应
+	Get("https://api.example.com/user")
 
-// user.Name 已自动填充
-fmt.Printf("User: %s, Trace: %v\n", user.Name, resp.Trace.TotalTime)
+fmt.Println(user.Name)          // 已自动填充
+fmt.Println(resp.Trace.TotalTime) // DNS/TCP/TLS/FirstByte 计时
 ```
 
-## 4. 链式 API 自定义
+## 6. POST / 表单 / 文件
 
 ```go
-client := tlsgateway.ImpersonateChain(profiles.Firefox_148).
-    SetUserAgent("custom-bot/1.0").
-    SetTimeout(30 * time.Second).
-    SetDebug(os.Stderr).
-    WithOrderedHeaders().   // Chrome 规范 header 顺序
-    Build()
+// JSON body
+resp, _ := tlsgateway.ImpersonateRequest(profiles.Chrome_150).
+	SetBodyString(`{"name":"alice"}`).
+	SetHeader("Content-Type", "application/json").
+	Post("https://api.example.com/users")
+
+// 有序表单（表单字段顺序也是浏览器指纹的一部分）
+resp, _ = tlsgateway.ImpersonateRequest(profiles.Chrome_150).
+	SetOrderedFormData("username", "alice", "password", "secret").
+	Post("https://api.example.com/login")
 ```
 
-## 5. 选择画像
-
-tlsgateway 内置 81 个预置画像：
+## 7. 代理
 
 ```go
-// Chrome
-profiles.Chrome_150        // Chrome 150 (最新)
-profiles.Chrome_146        // Chrome 146
-profiles.Chrome_131        // Chrome 131
+// 出站代理：HTTP 代理转发（通过 TransportOptions 设置）
+proxy := func(req *http.Request) (*url.URL, error) {
+	return url.Parse("http://user:pass@proxy.example.com:8080")
+}
+tr := tlsgateway.NewTransportWithOptions(profiles.Chrome_150, tlsgateway.TransportOptions{
+	Proxy: proxy,
+})
+client := &http.Client{Transport: tr, Timeout: 30 * time.Second}
 
-// Firefox
-profiles.Firefox_148       // Firefox 148
-
-// Safari
-profiles.Safari_iOS_18_5   // Safari iOS 18.5
-
-// 其他
-profiles.Brave_146         // Brave
-profiles.OkHttp4Android13  // OkHttp
+// 入站代理：把 tls-client 变成本地正向代理服务
+p := tlsgateway.NewProxy(":8080", profiles.Chrome_150)
+go p.ListenAndServe()
 ```
 
-## 6. 验证指纹
+## 8. 自检指纹
 
 ```go
-// 检查当前 TLS 指纹
-info, _ := tlsgateway.SelfCheck(profiles.Chrome_150)
-fmt.Printf("JA3: %s\nJA4: %s\n", info.JA3Hash, info.JA4)
-
-// 打印完整指纹
-tlsgateway.DumpFingerprint(profiles.Firefox_148)
-```
-
-## 7. TransportMiddleware
-
-```go
-tr := tlsgateway.NewTransport(profiles.Chrome_150)
-
-// 链式包装中间件
-wrapped := tr.Wrap(
-    tlsgateway.DebugMiddleware(func(format string, args ...any) {
-        log.Printf("[tlsgateway] "+format, args...)
-    }),
-    tlsgateway.UserAgentMiddleware("my-crawler/1.0"),
-)
-
-client := &http.Client{Transport: wrapped}
+info := tlsgateway.ImpersonateChain(profiles.Chrome_150).
+	Transport().SelfCheck("https://tls.peet.ws/api/all")
+fmt.Println(info.JA4) // 例如 t13d1516h2_8daaf6152771_...
 ```
 
 ## 下一步
 
-- [TLS 指纹](tls-fingerprint.md) — 深入了解 TLS 指纹原理
-- [HTTP 指纹](http-fingerprint.md) — H2 SETTINGS/Header 排序完整定制
-- [API 速览](api.md) — 所有 API 一览
+- [API 参考](api.md) — 全部公开 API
+- [指纹体系](fingerprint.md) — 三层指纹原理
+- [HTTP/3 指南](h3.md) — QUIC 详解
+- [验证矩阵](verification.md) — 平台与客户场景验证
