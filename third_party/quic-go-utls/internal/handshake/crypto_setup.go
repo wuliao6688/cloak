@@ -84,18 +84,33 @@ type cryptoSetup struct {
 var _ CryptoSetup = &cryptoSetup{}
 
 // overrideALPN replaces the ALPN extension in a ClientHelloSpec with the
-// given protocols, and restricts SupportedVersions to the given versions.
+// given protocols, restricts SupportedVersions to the given versions, and
+// (when tpData is non-nil) injects a QUIC transport parameters extension
+// right after ALPN — matching where browsers place it (extension 57).
+//
 // Used to adapt a TCP browser fingerprint for QUIC: QUIC mandates
 // ALPN "h3" and TLS 1.3 only, while browser TCP profiles advertise
 // h2/http1.1 and TLS 1.2+1.3. Every other fingerprint attribute
 // (cipher suites, other extensions, GREASE, ordering) stays identical.
-func overrideALPN(spec *tls.ClientHelloSpec, alpn []string) {
+func overrideALPN(spec *tls.ClientHelloSpec, alpn []string, tpData []byte) {
 	foundALPN := false
 	for i := range spec.Extensions {
 		switch ext := spec.Extensions[i].(type) {
 		case *tls.ALPNExtension:
 			ext.AlpnProtocols = alpn
 			foundALPN = true
+			// QUIC transport parameters go immediately after ALPN in
+			// browser ClientHellos (RFC 9001 §8.2 ordering).
+			if tpData != nil {
+				if tps, err := parseQUICTransportParameters(tpData); err == nil {
+					quicExt := &tls.QUICTransportParametersExtension{TransportParameters: tps}
+					// Insert after this ALPN extension.
+					spec.Extensions = append(spec.Extensions, nil)
+					copy(spec.Extensions[i+2:], spec.Extensions[i+1:])
+					spec.Extensions[i+1] = quicExt
+					i++ // skip the injected extension
+				}
+			}
 		case *tls.SupportedVersionsExtension:
 			// QUIC requires TLS 1.3; the TCP profile advertises 1.2+1.3.
 			ext.Versions = []uint16{tls.VersionTLS13}
@@ -106,6 +121,34 @@ func overrideALPN(spec *tls.ClientHelloSpec, alpn []string) {
 		// browser profiles, but be safe).
 		spec.Extensions = append(spec.Extensions, &tls.ALPNExtension{AlpnProtocols: alpn})
 	}
+}
+
+// parseQUICTransportParameters decodes quic-go's serialized transport
+// parameters (varint id + varint len + value, repeated) into a
+// tls.TransportParameters slice usable by utls's
+// QUICTransportParametersExtension. Unknown/grease IDs are kept verbatim
+// so the wire bytes match quic-go's output exactly.
+func parseQUICTransportParameters(data []byte) (tls.TransportParameters, error) {
+	var tps tls.TransportParameters
+	for len(data) > 0 {
+		id, n, err := quicvarint.Parse(data)
+		if err != nil {
+			return nil, err
+		}
+		data = data[n:]
+		length, n2, err := quicvarint.Parse(data)
+		if err != nil {
+			return nil, err
+		}
+		data = data[n2:]
+		if uint64(len(data)) < length {
+			return nil, fmt.Errorf("transport parameter %d: length %d exceeds remaining %d", id, length, len(data))
+		}
+		value := data[:length]
+		data = data[length:]
+		tps = append(tps, &tls.FakeQUICTransportParameter{Id: id, Val: value})
+	}
+	return tps, nil
 }
 
 // NewCryptoSetupClient creates a new crypto setup for the client
@@ -151,7 +194,8 @@ func NewCryptoSetupClient(
 		// ApplyPreset only".
 		spec, specErr := clientHelloID.ToSpec()
 		if specErr == nil {
-			overrideALPN(&spec, []string{"h3"})
+			tpData := cs.ourParams.Marshal(protocol.PerspectiveClient)
+			overrideALPN(&spec, []string{"h3"}, tpData)
 			uconn := tls.UQUICClient(&tls.QUICConfig{
 				TLSConfig:           tlsConf,
 				EnableSessionEvents: true,
