@@ -1,19 +1,10 @@
-# Security Policy
+# Security Policy (cloak 本地 fork)
 
-quic-go still in development. This means that there may be problems in our protocols,
-or there may be mistakes in our implementations.
-We take security vulnerabilities very seriously. If you discover a security issue,
-please bring it to our attention right away!
+本目录是 cloak 的本地 fork 组件,不直接对外发布。
 
-## Reporting a Vulnerability
+安全漏洞请通过 cloak 主仓库报告(或 GitHub Security Advisory)。
 
-If you find a vulnerability that may affect live deployments -- for example, by exposing
-a remote execution exploit -- please [**report privately**](https://github.com/bogdanfinn/quic-go-utls/security/advisories/new).
-Please **DO NOT file a public issue**.
+## 上游安全说明
 
-If the issue is an implementation weakness that cannot be immediately exploited or
-something not yet deployed, just discuss it openly.
-
-## Reporting a non security bug
-
-For non-security bugs, please simply file a GitHub [issue](https://github.com/bogdanfinn/quic-go-utls/issues/new).
+上游项目(quic-go)的安全政策适用于本 fork 的上游代码部分,
+但本 fork 的所有修改由 cloak 项目自行维护。

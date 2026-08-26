@@ -1,9 +1,9 @@
-module github.com/bogdanfinn/quic-go-utls
+module github.com/wuliao6688/quic-go-utls
 
 go 1.24.1
 
 require (
-	github.com/bogdanfinn/utls v1.7.7-barnius
+	github.com/wuliao6688/utls v1.7.7-barnius
 	github.com/quic-go/qpack v0.6.0
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/mock v0.5.2

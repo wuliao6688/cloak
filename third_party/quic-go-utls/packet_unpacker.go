@@ -3,11 +3,11 @@ package quic
 import (
 	"fmt"
 
-	"github.com/bogdanfinn/quic-go-utls/internal/handshake"
-	"github.com/bogdanfinn/quic-go-utls/internal/monotime"
-	"github.com/bogdanfinn/quic-go-utls/internal/protocol"
-	"github.com/bogdanfinn/quic-go-utls/internal/qerr"
-	"github.com/bogdanfinn/quic-go-utls/internal/wire"
+	"github.com/wuliao6688/quic-go-utls/internal/handshake"
+	"github.com/wuliao6688/quic-go-utls/internal/monotime"
+	"github.com/wuliao6688/quic-go-utls/internal/protocol"
+	"github.com/wuliao6688/quic-go-utls/internal/qerr"
+	"github.com/wuliao6688/quic-go-utls/internal/wire"
 )
 
 type headerDecryptor interface {

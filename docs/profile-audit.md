@@ -1,7 +1,7 @@
 # 画像数据论证报告
 
 > 论证日期：2026-08-26
-> 方法：项目 77 画像全量提取 + 与 curl-impersonate（真实浏览器抓包）、curl_cffi、上游 bogdanfinn/tls-client 横向对比
+> 方法：项目 77 画像全量提取 + 与 curl-impersonate（真实浏览器抓包）、curl_cffi、同类 Go 库 横向对比
 > 参考数据源：curl.patch（lexiforest/curl-impersonate，含 chrome99~150/firefox133~147/safari15~26/edge/okhttp 的 H2+H3+QUIC 指纹）
 
 ---
@@ -109,5 +109,5 @@ quic_transport_parameters= 1:30000;4:25165824;5:12582912;6:1048576;7:1048576;8:1
 
 - **数据源 1**：lexiforest/curl-impersonate `patches/curl.patch`（12009 行）——包含 chrome99~150、firefox133~147、safari15~26、edge、okhttp 的真实浏览器抓包指纹（H2 SETTINGS、H3 SETTINGS、QUIC TP、TLS 扩展顺序、伪头顺序、UA/头集合）
 - **数据源 2**：lexiforest/curl_cffi `fingerprints.py`——浏览器画像清单 + `h3_fingerprints` 标记（用于判断哪些浏览器有 H3 指纹可借鉴）
-- **数据源 3**：上游 bogdanfinn/tls-client——本项目画像源头（确认同源）
+- **数据源 3**：同类 Go 库——本项目画像源头（确认同源）
 - **验证**：项目现有 Chrome_144/Firefox_147 H3 数据与参考完全一致 → 补全模板可信

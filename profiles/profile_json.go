@@ -17,7 +17,7 @@ import (
 	"sort"
 	"strings"
 
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 )
 
 // ─── JSON Schema types ────────────────────────────────────────────────

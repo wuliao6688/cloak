@@ -6,11 +6,11 @@ import (
 	"slices"
 	"time"
 
-	"github.com/bogdanfinn/quic-go-utls/internal/ackhandler"
-	"github.com/bogdanfinn/quic-go-utls/internal/monotime"
-	"github.com/bogdanfinn/quic-go-utls/internal/protocol"
-	"github.com/bogdanfinn/quic-go-utls/internal/utils"
-	"github.com/bogdanfinn/quic-go-utls/internal/wire"
+	"github.com/wuliao6688/quic-go-utls/internal/ackhandler"
+	"github.com/wuliao6688/quic-go-utls/internal/monotime"
+	"github.com/wuliao6688/quic-go-utls/internal/protocol"
+	"github.com/wuliao6688/quic-go-utls/internal/utils"
+	"github.com/wuliao6688/quic-go-utls/internal/wire"
 )
 
 type pathID int64

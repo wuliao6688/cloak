@@ -24,9 +24,9 @@
 
 | # | 问题 | 来源 | 描述 |
 |---|---|---|---|
-| A1 | **并发崩溃** | tls-client #53 | 100 并发下 nil pointer dereference |
-| A2 | **长时间运行崩溃** | tls-client #71 | 运行数小时后 crash（fhttp setRequestCancel） |
-| A3 | **无超时挂起** | tls-client #33 | transport 没有 timeout，请求永久挂起 |
+| A1 | **并发崩溃** | cloak #53 | 100 并发下 nil pointer dereference |
+| A2 | **长时间运行崩溃** | cloak #71 | 运行数小时后 crash（fhttp setRequestCancel） |
+| A3 | **无超时挂起** | cloak #33 | transport 没有 timeout，请求永久挂起 |
 | A4 | **流式响应卡死** | curl_cffi #141 | stream=True 各种场景卡死 |
 | A5 | **长跑后无响应** | curl_cffi #578 | 8+ 小时后挂起，超时/异常都不触发 |
 | A6 | **轮询容易超时** | curl_cffi #106 | 轮询请求超时频率高于 requests |
@@ -35,47 +35,47 @@
 
 | # | 问题 | 来源 | 描述 |
 |---|---|---|---|
-| B1 | **TLS unexpected message** | tls-client #6 | 访问 google.com 报错（utls 兼容性） |
-| B2 | **TLS illegal parameter** | tls-client #185 | Ubuntu 22.04 特定环境握手失败 |
+| B1 | **TLS unexpected message** | cloak #6 | 访问 google.com 报错（utls 兼容性） |
+| B2 | **TLS illegal parameter** | cloak #185 | Ubuntu 22.04 特定环境握手失败 |
 | B3 | **TLSFingerprint 丢失** | req #1 | 首个请求后指纹失效（状态泄漏） |
 | B4 | **移动端指纹缺口** | curl_cffi #434 | Chrome v130 后无 Android TLS 指纹 |
-| B5 | **JA3 构建 Spec 报错** | tls-client #7 | 用 JA3 构造画像失败 |
-| B6 | **自定义签名算法** | tls-client #88 | iOS App 抓包含 0x0301/0x0303 等算法无法复制 |
+| B5 | **JA3 构建 Spec 报错** | cloak #7 | 用 JA3 构造画像失败 |
+| B6 | **自定义签名算法** | cloak #88 | iOS App 抓包含 0x0301/0x0303 等算法无法复制 |
 
 ### C. HTTP 行为类
 
 | # | 问题 | 来源 | 描述 |
 |---|---|---|---|
-| C1 | **POST 返回 400** | tls-client #147 | GET 正常但 POST 全部 400 Bad Gateway |
-| C2 | **重定向无限循环** | tls-client #14 | WithNotFollowRedirects 反而跟随；httpbin cookies 卡死 |
-| C3 | **gzip 响应乱码** | tls-client #32 | Accept-Encoding 设置后 body 是乱码 |
-| C4 | **响应协议头大小写** | tls-client #119 | HTTP/2.0 vs http/2.0 case 问题 |
-| C5 | **protobuf 字节错乱** | tls-client #120 | 发送/接收 protobuf 时多出字节 |
+| C1 | **POST 返回 400** | cloak #147 | GET 正常但 POST 全部 400 Bad Gateway |
+| C2 | **重定向无限循环** | cloak #14 | WithNotFollowRedirects 反而跟随；httpbin cookies 卡死 |
+| C3 | **gzip 响应乱码** | cloak #32 | Accept-Encoding 设置后 body 是乱码 |
+| C4 | **响应协议头大小写** | cloak #119 | HTTP/2.0 vs http/2.0 case 问题 |
+| C5 | **protobuf 字节错乱** | cloak #120 | 发送/接收 protobuf 时多出字节 |
 | C6 | **digest 认证 body 为 nil** | req | 摘要认证后响应体丢失 |
 
 ### D. 网络/代理类
 
 | # | 问题 | 来源 | 描述 |
 |---|---|---|---|
-| D1 | **代理导致 EOF** | tls-client #66 | 使用代理时 frequent unexpected EOF |
+| D1 | **代理导致 EOF** | cloak #66 | 使用代理时 frequent unexpected EOF |
 | D2 | **代理 SSL 版本错误** | curl_cffi #6 | 带用户名密码的代理 WRONG_VERSION_NUMBER |
-| D3 | **自定义 Dial 缺失** | tls-client #218/#200 | 需要自定义 socket/DNS（scraper、proxy 场景） |
-| D4 | **Dialer 类型太具体** | tls-client #160 | 应改为 interface 便于扩展 |
-| D5 | **证书 pinning 通配符** | tls-client #61 | 需要 OkHttp 式 *.domain 通配符 |
+| D3 | **自定义 Dial 缺失** | cloak #218/#200 | 需要自定义 socket/DNS（scraper、proxy 场景） |
+| D4 | **Dialer 类型太具体** | cloak #160 | 应改为 interface 便于扩展 |
+| D5 | **证书 pinning 通配符** | cloak #61 | 需要 OkHttp 式 *.domain 通配符 |
 | D6 | **证书路径问题** | curl_cffi #104 | CAfile 路径错误导致 ErrCode 77 |
 
 ### E. 功能缺口类
 
 | # | 问题 | 来源 | 描述 |
 |---|---|---|---|
-| E1 | **HTTP/3 支持** | tls-client #104/#189 | QUIC 时代必须（本项目已实现 ✅） |
-| E2 | **UA 跟随画像** | tls-client #108 | 用浏览器画像时应自动匹配 UA |
-| E3 | **请求前/后钩子** | tls-client #220 | prerequest/postrequest hooks |
-| E4 | **响应落盘** | tls-client #21 | 大响应直接写文件而非内存 |
-| E5 | **优先级帧顺序** | tls-client #17 | Firefox WINDOW_UPDATE 帧顺序不对 |
-| E6 | **自定义流 ID** | tls-client #205 | AllowHTTP、StreamID 值设置 |
-| E7 | **本地地址绑定** | tls-client #52 | WithLocalAddr 多网卡场景 |
-| E8 | **编码支持** | tls-client #207 | EUC-KR 韩文编码 |
+| E1 | **HTTP/3 支持** | cloak #104/#189 | QUIC 时代必须（本项目已实现 ✅） |
+| E2 | **UA 跟随画像** | cloak #108 | 用浏览器画像时应自动匹配 UA |
+| E3 | **请求前/后钩子** | cloak #220 | prerequest/postrequest hooks |
+| E4 | **响应落盘** | cloak #21 | 大响应直接写文件而非内存 |
+| E5 | **优先级帧顺序** | cloak #17 | Firefox WINDOW_UPDATE 帧顺序不对 |
+| E6 | **自定义流 ID** | cloak #205 | AllowHTTP、StreamID 值设置 |
+| E7 | **本地地址绑定** | cloak #52 | WithLocalAddr 多网卡场景 |
+| E8 | **编码支持** | cloak #207 | EUC-KR 韩文编码 |
 
 ---
 
@@ -147,6 +147,6 @@
 ### 4.4 本次修复
 
 **`Request.SetInsecureSkipVerify` 静默失效**（真实缺陷，对应客户 C1 类问题）：
-- 根因：类型断言 `r.client.Transport.(*http.Transport)` —— 项目实际是自定义 `tlsgateway.Transport` 被 HeaderRoundTripper/customHeader 包装
+- 根因：类型断言 `r.client.Transport.(*http.Transport)` —— 项目实际是自定义 `cloak.Transport` 被 HeaderRoundTripper/customHeader 包装
 - 修复：新增 `InsecureSkipVerrifier` 接口 + `Transport.SetInsecureSkipVerify` 公开方法 + 三个包装器 `Unwrap()` 方法，递归穿透包装链
 - 验证：自签证书 + 完整包装链请求成功（修复前失败）

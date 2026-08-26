@@ -17,12 +17,12 @@ import (
 	"time"
 
 	"net/http"
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 
-	"github.com/bogdanfinn/quic-go-utls"
-	"github.com/bogdanfinn/quic-go-utls/http3/qlog"
-	"github.com/bogdanfinn/quic-go-utls/qlogwriter"
-	"github.com/bogdanfinn/quic-go-utls/quicvarint"
+	"github.com/wuliao6688/quic-go-utls"
+	"github.com/wuliao6688/quic-go-utls/http3/qlog"
+	"github.com/wuliao6688/quic-go-utls/qlogwriter"
+	"github.com/wuliao6688/quic-go-utls/quicvarint"
 
 	"github.com/quic-go/qpack"
 )

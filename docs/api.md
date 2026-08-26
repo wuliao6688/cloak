@@ -1,7 +1,7 @@
 # API 参考
 
-所有公开 API 速查。包路径：`github.com/bogdanfinn/tls-client/tlsgateway`（核心）和
-`github.com/bogdanfinn/tls-client/profiles`（画像）。
+所有公开 API 速查。包路径：`github.com/wuliao6688/cloak`（核心）和
+`github.com/wuliao6688/cloak/profiles`（画像）。
 
 ## 1. 入口函数
 

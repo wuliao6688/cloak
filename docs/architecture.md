@@ -3,8 +3,8 @@
 ## 目录结构
 
 ```
-tls-client/
-├── tlsgateway/              ← 核心库（全部公开 API）
+cloak/
+├── cloak/              ← 核心库（全部公开 API）
 │   ├── impersonate.go       ← 入口：Impersonate/ChainBuilder/DevMode
 │   ├── request.go           ← 请求级 builder（req 风格）
 │   ├── response.go          ← Response + ResultState + TraceInfo
@@ -38,7 +38,7 @@ tls-client/
 ├── cmd/
 │   ├── verify-fingerprints/ ← 14 平台指纹验证工具
 │   ├── stress/              ← 压力测试工具
-│   ├── tlsgateway-proxy/    ← 代理服务（画像热加载）
+│   ├── cloak-proxy/    ← 代理服务（画像热加载）
 │   └── export-profiles/     ← 画像导出工具
 ├── docs/                    ← 文档
 ├── README.md
@@ -102,7 +102,7 @@ H3 是例外：QUIC 是全新协议栈，必须引入 quic-go。放在 `third_pa
 
 ### 3. H3 指纹注入（UQUICClient）
 
-上游 bogdanfinn 的 H3 用标准 `QUICClient`——QUIC TLS 层是 Go 默认指纹。
+同类 Go 库 的 H3 用标准 `QUICClient`——QUIC TLS 层是 Go 默认指纹。
 本项目 fork quic-go-utls 后改用 `UQUICClient + HelloCustom + ApplyPreset`，
 把浏览器 ClientHello 注入 QUIC TLS 握手（详见 [HTTP/3 指南](h3.md)）。
 
@@ -165,7 +165,7 @@ H3RaceTransport.RoundTrip
 
 | 依赖 | 用途 | 是否 fork |
 |---|---|---|
-| `github.com/bogdanfinn/utls` | TLS 指纹 | 否（Tor 团队） |
+| `third_party/utls` | TLS 指纹（uTLS 本地 fork） | ✅ 本地 |
 | `golang.org/x/net` | HTTP/2（源） | 否 |
 | `internal/http2` | H2 指纹定制 | ✅ fork（API 兼容） |
 | `third_party/quic-go-utls` | QUIC + H3 | ✅ fork（UQUICClient 注入） |
@@ -173,7 +173,7 @@ H3RaceTransport.RoundTrip
 
 ## 与上游的架构差异
 
-| | 本项目 | 上游 bogdanfinn |
+| | 本项目 | 同类 Go 库 |
 |---|---|---|
 | H3 QUIC TLS 指纹 | ✅ UQUICClient 注入 | ❌ Go 默认 |
 | HTTP 库 | 标准 net/http | fhttp（net/http fork） |

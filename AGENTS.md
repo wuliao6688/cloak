@@ -5,8 +5,8 @@
 ### 项目结构
 
 ```
-tls-client/
-├── tlsgateway/              ← 核心库（全部公开 API）
+cloak/
+├── cloak/              ← 核心库（全部公开 API）
 │   ├── impersonate.go       ← 入口：Impersonate/ImpersonateH3/ChainBuilder/DevMode
 │   ├── request.go           ← Request 流式 builder + hooks
 │   ├── response.go          ← Response + ResultState + TraceInfo
@@ -39,7 +39,7 @@ tls-client/
 ├── cmd/
 │   ├── verify-fingerprints/ ← 14 平台指纹验证工具
 │   ├── stress/              ← 压力测试工具
-│   ├── tlsgateway-proxy/    ← 代理服务（画像热加载）
+│   ├── cloak-proxy/    ← 代理服务（画像热加载）
 │   └── export-profiles/     ← 画像导出工具
 ├── docs/                    ← 文档（9 篇）
 ├── README.md
@@ -50,7 +50,7 @@ tls-client/
 
 ### 依赖
 
-- `github.com/bogdanfinn/utls` — TLS 指纹（Tor 团队）
+- `third_party/utls` — uTLS 本地 fork（TLS 指纹，Tor 团队 uTLS 衍生）
 - `golang.org/x/net` — HTTP/2（源）
 - `internal/http2` — x/net/http2 fork（H2 指纹定制，API 兼容）
 - `third_party/quic-go-utls` — quic-go fork（UQUICClient 注入 QUIC TLS 指纹）

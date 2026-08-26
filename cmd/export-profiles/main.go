@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bogdanfinn/tls-client/profiles"
+	"github.com/wuliao6688/cloak/profiles"
 )
 
 func main() {

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sync"
 
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 )
 
 var DefaultClientProfile = Chrome_150

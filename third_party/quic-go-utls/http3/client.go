@@ -13,9 +13,9 @@ import (
 	"net/http"
 	"net/http/httptrace"
 
-	"github.com/bogdanfinn/quic-go-utls"
-	"github.com/bogdanfinn/quic-go-utls/http3/qlog"
-	"github.com/bogdanfinn/quic-go-utls/quicvarint"
+	"github.com/wuliao6688/quic-go-utls"
+	"github.com/wuliao6688/quic-go-utls/http3/qlog"
+	"github.com/wuliao6688/quic-go-utls/quicvarint"
 
 	"github.com/quic-go/qpack"
 )

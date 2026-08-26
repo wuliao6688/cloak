@@ -1,7 +1,7 @@
 // Package profiles provides TLS ClientHello profiles and HTTP/2
 // fingerprint parameters. H2 types are defined locally so the profiles
 // package has zero external dependencies beyond uTLS — downstream
-// packages (e.g. tlsgateway) do not transitively pull in fhttp/http2.
+// packages (e.g. cloak) do not transitively pull in fhttp/http2.
 package profiles
 
 // SettingID identifies an HTTP/2 SETTINGS parameter.

@@ -3,7 +3,7 @@ package http3
 import (
 	"crypto/tls"
 
-	utls "github.com/bogdanfinn/utls"
+	utls "github.com/wuliao6688/utls"
 )
 
 // toStdTLSState converts a utls.ConnectionState to a crypto/tls.ConnectionState.

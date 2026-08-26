@@ -1,18 +1,17 @@
-module github.com/bogdanfinn/tls-client
+module github.com/wuliao6688/cloak
 
 go 1.26.5
 
 require (
-	github.com/bogdanfinn/utls v1.7.7-barnius
 	github.com/stretchr/testify v1.11.1
+	github.com/wuliao6688/quic-go-utls v0.0.0-00010101000000-000000000000
+	github.com/wuliao6688/utls v1.7.7-barnius
 	golang.org/x/net v0.48.0
 )
 
-// Local fork of quic-go-utls with uTLS ClientHelloID injection into the
-// QUIC TLS 1.3 handshake (HTTP/3 TLS fingerprinting). See third_party/.
-require github.com/bogdanfinn/quic-go-utls v1.0.9-utls
+replace github.com/wuliao6688/utls => ./third_party/utls
 
-replace github.com/bogdanfinn/quic-go-utls => ./third_party/quic-go-utls
+replace github.com/wuliao6688/quic-go-utls => ./third_party/quic-go-utls
 
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect

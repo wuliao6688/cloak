@@ -1,15 +1,15 @@
-# tls-client
+# cloak
 
 Go 语言的浏览器指纹 HTTP 客户端 —— **TLS 1.3 + HTTP/2 + HTTP/3 三层指纹全覆盖**，
 让服务端无法区分你的请求和真实浏览器。
 
 ```
-go get github.com/bogdanfinn/tls-client
+go get github.com/wuliao6688/cloak
 ```
 
 ## 为什么用它
 
-| 能力 | tls-client | 上游 bogdanfinn | curl_cffi | imroc/req |
+| 能力 | cloak | 同类 Go 库 | curl_cffi | imroc/req |
 |---|---|---|---|---|
 | TLS 指纹（JA3/JA4） | ✅ 77 画像 | ✅ | ✅ | ⚠️ 有限 |
 | HTTP/2 指纹（SETTINGS/伪头/优先级） | ✅ 完整定制 | ✅ | ✅ | ❌ |
@@ -20,7 +20,7 @@ go get github.com/bogdanfinn/tls-client
 | 内置正向代理 | ✅ | ❌ | ❌ | ❌ |
 
 **关键差异**：上游和 curl_cffi 的 H3 只做了 HTTP/3 应用层指纹（SETTINGS 帧），
-QUIC TLS 握手层仍是 Go/curl 默认指纹——**tls-client 通过 UQUICClient 把浏览器
+QUIC TLS 握手层仍是 Go/curl 默认指纹——**cloak 通过 UQUICClient 把浏览器
 ClientHello 注入 QUIC TLS 握手**，是唯一三层指纹全对齐的实现。
 
 ## 快速上手
@@ -31,18 +31,18 @@ package main
 import (
 	"fmt"
 
-	"github.com/bogdanfinn/tls-client/profiles"
-	"github.com/bogdanfinn/tls-client/tlsgateway"
+	"github.com/wuliao6688/cloak/profiles"
+	"github.com/wuliao6688/cloak"
 )
 
 func main() {
 	// 普通模式：TLS + HTTP/2 指纹
-	client := tlsgateway.Impersonate(profiles.Chrome_150)
+	client := cloak.Impersonate(profiles.Chrome_150)
 	resp, _ := client.Get("https://www.akamai.com/")
 	fmt.Println(resp.StatusCode) // 200
 
 	// H3 模式：HTTP/3 (QUIC) 优先，自动降级 H2
-	client3 := tlsgateway.ImpersonateH3(profiles.Chrome_150)
+	client3 := cloak.ImpersonateH3(profiles.Chrome_150)
 	resp, _ = client3.Get("https://www.cloudflare.com/cdn-cgi/trace")
 	// 响应头里会看到 http=http/3
 }

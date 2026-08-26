@@ -14,11 +14,11 @@ import (
 
 	"net/http"
 	"net/http/httptrace"
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 
 	"golang.org/x/net/http/httpguts"
 
-	"github.com/bogdanfinn/quic-go-utls"
+	"github.com/wuliao6688/quic-go-utls"
 )
 
 // Settings are HTTP/3 settings that apply to the underlying connection.

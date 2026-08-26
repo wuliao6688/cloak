@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bogdanfinn/tls-client/profiles"
-	"github.com/bogdanfinn/tls-client/tlsgateway"
+	"github.com/wuliao6688/cloak/profiles"
+	"github.com/wuliao6688/cloak"
 )
 
 var (
@@ -124,7 +124,7 @@ func main() {
 }
 
 func worker(ctx context.Context, urls []string) {
-	client := tlsgateway.Impersonate(profiles.Chrome_150)
+	client := cloak.Impersonate(profiles.Chrome_150)
 	for {
 		select {
 		case <-ctx.Done():

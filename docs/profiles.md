@@ -124,7 +124,7 @@ Chrome，检测方直接判 bot）。保持无 H3 → 自动降级 H2，与真�
 |---|---|
 | curl-impersonate（lexiforest） | 真实浏览器抓包，12009 行 patch，含 chrome99~150 / firefox133~147 / safari15~26 的 H2+H3+QUIC 指纹 |
 | curl_cffi | 画像清单 + h3_fingerprints 标记 |
-| 上游 bogdanfinn/tls-client | 本项目画像源头（同源） |
+| 同类 Go 库 | 本项目画像源头（同源） |
 
 **论证结论**：
 1. H2 SETTINGS 与 curl 参考**逐版本一致**（含 Chrome 99→119 的演变）
@@ -137,10 +137,10 @@ Chrome，检测方直接判 bot）。保持无 H3 → 自动降级 H2，与真�
 ## 使用画像
 
 ```go
-import "github.com/bogdanfinn/tls-client/profiles"
+import "github.com/wuliao6688/cloak/profiles"
 
 // 直接引用画像常量
-client := tlsgateway.Impersonate(profiles.Chrome_150)
+client := cloak.Impersonate(profiles.Chrome_150)
 
 // 按 key 动态解析（key 是注册表名，小写蛇形）
 p, err := profiles.ResolveClientProfileStrict("chrome_150")

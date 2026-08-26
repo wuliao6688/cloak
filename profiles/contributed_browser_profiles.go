@@ -1,8 +1,8 @@
 package profiles
 
 import (
-	tls "github.com/bogdanfinn/utls"
-	"github.com/bogdanfinn/utls/dicttls"
+	tls "github.com/wuliao6688/utls"
+	"github.com/wuliao6688/utls/dicttls"
 )
 
 var Firefox_148 = ClientProfile{

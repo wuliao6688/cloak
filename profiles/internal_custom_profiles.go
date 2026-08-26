@@ -3,7 +3,7 @@ package profiles
 import (
 	"math"
 
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 )
 
 var MMSIos2 = getMMSClientProfile2()

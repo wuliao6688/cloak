@@ -4,8 +4,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/bogdanfinn/quic-go-utls/internal/monotime"
-	"github.com/bogdanfinn/quic-go-utls/internal/protocol"
+	"github.com/wuliao6688/quic-go-utls/internal/monotime"
+	"github.com/wuliao6688/quic-go-utls/internal/protocol"
 )
 
 // This cubic implementation is based on the one found in Chromiums's QUIC

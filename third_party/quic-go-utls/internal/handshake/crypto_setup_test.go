@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 
-	"github.com/bogdanfinn/quic-go-utls/internal/protocol"
-	"github.com/bogdanfinn/quic-go-utls/internal/qerr"
-	"github.com/bogdanfinn/quic-go-utls/internal/testdata"
-	"github.com/bogdanfinn/quic-go-utls/internal/utils"
-	"github.com/bogdanfinn/quic-go-utls/internal/wire"
+	"github.com/wuliao6688/quic-go-utls/internal/protocol"
+	"github.com/wuliao6688/quic-go-utls/internal/qerr"
+	"github.com/wuliao6688/quic-go-utls/internal/testdata"
+	"github.com/wuliao6688/quic-go-utls/internal/utils"
+	"github.com/wuliao6688/quic-go-utls/internal/wire"
 
 	"github.com/stretchr/testify/require"
 )

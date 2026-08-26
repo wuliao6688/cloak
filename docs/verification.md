@@ -60,7 +60,7 @@ go run ./cmd/verify-fingerprints -all          # 全部画像
 
 ## 3. 客户场景验证
 
-从三个主流库（bogdanfinn/tls-client、curl_cffi、imroc/req）的 **46 个真实
+从三个主流库（同类 Go 库、curl_cffi、imroc/req）的 **46 个真实
 issue** 中提取高频问题，逐项复现验证。详见 [客户场景报告](customer-scenarios.md)。
 
 ### 动态验证结果

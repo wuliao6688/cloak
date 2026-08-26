@@ -6,11 +6,11 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 
 	"golang.org/x/crypto/chacha20"
 
-	"github.com/bogdanfinn/quic-go-utls/internal/protocol"
+	"github.com/wuliao6688/quic-go-utls/internal/protocol"
 )
 
 type headerProtector interface {

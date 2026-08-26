@@ -1,7 +1,7 @@
 package profiles
 
 import (
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 )
 
 var Chrome_150_PSK = ClientProfile{

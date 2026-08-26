@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/bogdanfinn/quic-go-utls"
+	"github.com/wuliao6688/quic-go-utls"
 )
 
 const streamDatagramQueueLen = 32

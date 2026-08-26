@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 )
 
 // marshalProfileClientHello builds a full TLS ClientHello from the profile

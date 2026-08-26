@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bogdanfinn/quic-go-utls/internal/protocol"
-	"github.com/bogdanfinn/quic-go-utls/qlogwriter"
-	"github.com/bogdanfinn/quic-go-utls/quicvarint"
-	tls "github.com/bogdanfinn/utls"
+	"github.com/wuliao6688/quic-go-utls/internal/protocol"
+	"github.com/wuliao6688/quic-go-utls/qlogwriter"
+	"github.com/wuliao6688/quic-go-utls/quicvarint"
+	tls "github.com/wuliao6688/utls"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

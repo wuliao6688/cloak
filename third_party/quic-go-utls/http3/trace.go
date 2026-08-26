@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"net/http/httptrace"
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 
-	"github.com/bogdanfinn/quic-go-utls"
+	"github.com/wuliao6688/quic-go-utls"
 )
 
 func traceGetConn(trace *httptrace.ClientTrace, hostPort string) {

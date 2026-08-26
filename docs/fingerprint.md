@@ -1,6 +1,6 @@
 # 指纹体系
 
-tls-client 在**三个网络层**复刻浏览器指纹。理解这三层，就知道为什么它能过
+cloak 在**三个网络层**复刻浏览器指纹。理解这三层，就知道为什么它能过
 Cloudflare / Akamai / Imperva 等 WAF。
 
 ## 1. 为什么需要指纹
@@ -15,7 +15,7 @@ HTTP/3 层      → QUIC 参数、H3 SETTINGS 帧
 应用层         → UA、Accept、Sec-CH-UA 等头
 ```
 
-`curl`、`requests`、`net/http` 的默认指纹一眼可辨。tls-client 让每一层都与
+`curl`、`requests`、`net/http` 的默认指纹一眼可辨。cloak 让每一层都与
 真实浏览器逐字节一致。
 
 ## 2. TLS 层（uTLS）
@@ -25,7 +25,7 @@ HTTP/3 层      → QUIC 参数、H3 SETTINGS 帧
 TLS 1.3 ClientHello 包含：密码套件、扩展列表、扩展顺序、supported_groups、
 signature_algorithms 等。每个浏览器（甚至版本）的组合都不同 → JA3/JA4 哈希。
 
-tls-client 用 [uTLS](https://github.com/refraction-networking/utls)（Tor 团队）
+cloak 用 [uTLS](https://github.com/refraction-networking/utls)（Tor 团队）
 构造**与浏览器完全相同的 ClientHello 字节**，而非"看起来像"。
 
 ### 实现
@@ -99,8 +99,8 @@ HTTP/3 基于 QUIC（UDP）。QUIC 内部也做 TLS 1.3 握手，但**加密层�
 而且握手方式不同（Transport Parameters 扩展、ALPN=h3、TLS 1.3 only）。
 
 - `curl` 的 H3：QUIC TLS 是 ngtcp2 默认 → 指纹暴露
-- 上游 bogdanfinn：用了 quic-go-utls，但 **QUIC TLS 层仍是 Go 默认指纹**
-- **tls-client：用 `UQUICClient` 把浏览器 ClientHello 注入 QUIC TLS 握手** ✅
+- 同类 Go 库：用了 quic-go-utls，但 **QUIC TLS 层仍是 Go 默认指纹**
+- **cloak：用 `UQUICClient` 把浏览器 ClientHello 注入 QUIC TLS 握手** ✅
 
 ### 实现（third_party/quic-go-utls fork）
 
@@ -139,8 +139,8 @@ http3SendGreaseFrames: true,
 Chrome 会**同时发起 H2 和 H3 连接，谁先响应用谁**（Happy Eyeballs）。
 
 ```go
-// tls-client 的 H3RaceTransport 完全复刻这一行为
-rt := tlsgateway.NewH3RaceTransport(profiles.Chrome_150)
+// cloak 的 H3RaceTransport 完全复刻这一行为
+rt := cloak.NewH3RaceTransport(profiles.Chrome_150)
 // 1. 首个请求：H3 + H2 并行赛跑
 // 2. 胜者按域名缓存（h3 或 h2）
 // 3. 后续请求直接走缓存协议

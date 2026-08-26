@@ -2,14 +2,14 @@
 
 ## 是什么
 
-tls-client 是一个 Go 编写的 HTTP 客户端库，核心能力是**模拟真实浏览器的网络指纹**。
+cloak 是一个 Go 编写的 HTTP 客户端库，核心能力是**模拟真实浏览器的网络指纹**。
 当你的程序用 `net/http` 发请求时，服务端可以通过 TLS 握手、HTTP/2 SETTINGS、
-HTTP/3 QUIC 参数等特征识别出"这不是浏览器"。tls-client 让这些特征与真实浏览器
+HTTP/3 QUIC 参数等特征识别出"这不是浏览器"。cloak 让这些特征与真实浏览器
 **逐字节一致**。
 
 ## 解决什么问题
 
-| 场景 | 没有 tls-client | 有 tls-client |
+| 场景 | 没有 cloak | 有 cloak |
 |---|---|---|
 | 抓取 Akamai/Cloudflare 保护的站点 | 403 / 1020 / JS 挑战 | 正常 200 |
 | 批量注册/登录自动化 | 请求被风控识别 | 与浏览器无异 |
@@ -76,7 +76,7 @@ HTTP/3 QUIC 参数等特征识别出"这不是浏览器"。tls-client 让这些�
 
 ## 与生态对比
 
-| | tls-client | 上游 bogdanfinn | curl_cffi | imroc/req |
+| | cloak | 同类 Go 库 | curl_cffi | imroc/req |
 |---|---|---|---|---|
 | 语言 | Go | Go | Python | Go |
 | H3 QUIC TLS 指纹 | ✅ | ❌ | ❌ | ❌ |

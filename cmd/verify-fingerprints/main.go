@@ -39,8 +39,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bogdanfinn/tls-client/profiles"
-	"github.com/bogdanfinn/tls-client/tlsgateway"
+	"github.com/wuliao6688/cloak/profiles"
+	"github.com/wuliao6688/cloak"
 )
 
 type FPCheck struct {
@@ -63,14 +63,14 @@ func (f FPCheck) Status() string {
 	return "⚠️"
 }
 
-type CheckFunc func(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck
+type CheckFunc func(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck
 
 // H3CheckFunc checks HTTP/3 capabilities with an H3-racing transport.
-type H3CheckFunc func(tr *tlsgateway.H3RaceTransport, profile string, timeout time.Duration) FPCheck
+type H3CheckFunc func(tr *cloak.H3RaceTransport, profile string, timeout time.Duration) FPCheck
 
 // ─── TLS API checks ───
 
-func checkPeerWS(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkPeerWS(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: "tls.peet.ws", Category: "tls_api"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
@@ -99,7 +99,7 @@ func checkPeerWS(tr *tlsgateway.Transport, profile string, timeout time.Duration
 	return fp
 }
 
-func checkBrowserLeaks(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkBrowserLeaks(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: "browserleaks.com", Category: "tls_api"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
@@ -128,7 +128,7 @@ func checkBrowserLeaks(tr *tlsgateway.Transport, profile string, timeout time.Du
 
 // ─── WAF/CDN checks ───
 
-func checkCloudflare(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkCloudflare(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: "cloudflare", Category: "waf_cdn"}
 	client := &http.Client{Transport: tr, Timeout: timeout, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
@@ -152,15 +152,15 @@ func checkCloudflare(tr *tlsgateway.Transport, profile string, timeout time.Dura
 	return fp
 }
 
-func checkImperva(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkImperva(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	return checkStatus(tr, profile, "imperva.com", "https://www.imperva.com/", timeout)
 }
 
-func checkF5(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkF5(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	return checkStatus(tr, profile, "f5.com", "https://www.f5.com/", timeout)
 }
 
-func checkAkamai(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkAkamai(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: "akamai.com", Category: "waf_cdn"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
@@ -188,7 +188,7 @@ func checkAkamai(tr *tlsgateway.Transport, profile string, timeout time.Duration
 	return fp
 }
 
-func checkDataDome(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkDataDome(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: "datadome.co", Category: "waf_cdn"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
@@ -212,15 +212,15 @@ func checkDataDome(tr *tlsgateway.Transport, profile string, timeout time.Durati
 	return fp
 }
 
-func checkHcaptcha(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkHcaptcha(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	return checkStatus(tr, profile, "hcaptcha.com", "https://hcaptcha.com/", timeout)
 }
 
-func checkRecaptcha(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkRecaptcha(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	return checkStatus(tr, profile, "recaptcha-demo", "https://www.google.com/recaptcha/api2/demo", timeout)
 }
 
-func checkSannysoft(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkSannysoft(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: "sannysoft.com", Category: "waf_cdn"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
@@ -246,7 +246,7 @@ func checkSannysoft(tr *tlsgateway.Transport, profile string, timeout time.Durat
 	return fp
 }
 
-func checkBrowserscan(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkBrowserscan(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: "browserscan.net", Category: "tls_api"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
@@ -276,7 +276,7 @@ func checkBrowserscan(tr *tlsgateway.Transport, profile string, timeout time.Dur
 
 // ─── HTTP check ───
 
-func checkHTTPBin(tr *tlsgateway.Transport, profile string, timeout time.Duration) FPCheck {
+func checkHTTPBin(tr *cloak.Transport, profile string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: "httpbin.org", Category: "http"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
@@ -301,7 +301,7 @@ func checkHTTPBin(tr *tlsgateway.Transport, profile string, timeout time.Duratio
 	return fp
 }
 
-func checkStatus(tr *tlsgateway.Transport, profile, platform, url string, timeout time.Duration) FPCheck {
+func checkStatus(tr *cloak.Transport, profile, platform, url string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: platform, Category: "waf_cdn"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
@@ -353,7 +353,7 @@ func trunc(s string, n int) string {
 // HTTP/3 to an H3-capable endpoint (http3.is echoes the negotiated
 // protocol). This proves the whole H3 stack works end-to-end:
 // QUIC connect + uTLS fingerprint over QUIC + H3 SETTINGS.
-func checkHTTP3IS(tr *tlsgateway.H3RaceTransport, profile string, timeout time.Duration) FPCheck {
+func checkHTTP3IS(tr *cloak.H3RaceTransport, profile string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: "http3.is", Category: "http3"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
@@ -379,7 +379,7 @@ func checkHTTP3IS(tr *tlsgateway.H3RaceTransport, profile string, timeout time.D
 // browser at the HTTP/3 SETTINGS layer (quic.browserleaks.com echoes
 // h3_text like "1:65536;6:262144;7:100;51:1;GREASE|..."). Only run
 // against profiles that carry H3 data (browser profiles).
-func checkQuicBrowserLeaks(tr *tlsgateway.H3RaceTransport, profile string, timeout time.Duration) FPCheck {
+func checkQuicBrowserLeaks(tr *cloak.H3RaceTransport, profile string, timeout time.Duration) FPCheck {
 	fp := FPCheck{Profile: profile, Platform: "quic.browserleaks.com", Category: "http3"}
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	start := time.Now()
@@ -480,7 +480,7 @@ func main() {
 			go func(k string, p profiles.ClientProfile, cn string, fn CheckFunc) {
 				defer wg.Done()
 				defer func() { <-sem }()
-				tr := tlsgateway.NewTransport(p)
+				tr := cloak.NewTransport(p)
 				defer tr.CloseIdleConnections()
 				r := fn(tr, p.GetClientHelloStr(), *timeoutFlag)
 				mu.Lock()
@@ -497,7 +497,7 @@ func main() {
 				go func(k string, p profiles.ClientProfile, cn string, fn H3CheckFunc) {
 					defer wg.Done()
 					defer func() { <-sem }()
-					tr := tlsgateway.NewH3RaceTransport(p)
+					tr := cloak.NewH3RaceTransport(p)
 					defer tr.CloseIdleConnections()
 					r := fn(tr, p.GetClientHelloStr(), *timeoutFlag)
 					mu.Lock()

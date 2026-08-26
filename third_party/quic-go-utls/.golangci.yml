@@ -28,7 +28,7 @@ linters:
         quicvarint:
           list-mode: strict
           files:
-            - '**/github.com/bogdanfinn/quic-go-utls/quicvarint/*'
+            - '**/github.com/wuliao6688/quic-go-utls/quicvarint/*'
             - '!$test'
           allow:
             - $gostd
@@ -51,10 +51,10 @@ linters:
           files:
             - '**/http3/**'
           deny:
-            - pkg: 'github.com/bogdanfinn/quic-go-utls/internal'
+            - pkg: 'github.com/wuliao6688/quic-go-utls/internal'
               desc: 'no dependency on quic-go/internal'
           allow:
-            - 'github.com/bogdanfinn/quic-go-utls/internal/synctest'
+            - 'github.com/wuliao6688/quic-go-utls/internal/synctest'
     misspell:
       ignore-rules:
         - ect
@@ -83,7 +83,7 @@ linters:
         path: _test\.go
         text: 'SA1029:' # inappropriate key in call to context.WithValue
       # WebTransport still relies on the ConnectionTracingID and ConnectionTracingKey.
-      # See https://github.com/bogdanfinn/quic-go-utls/issues/4405 for more details.
+      # See https://github.com/wuliao6688/quic-go-utls/issues/4405 for more details.
       - linters:
           - staticcheck
         paths:

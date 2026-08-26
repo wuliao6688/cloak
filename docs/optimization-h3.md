@@ -23,13 +23,13 @@
 **铁证（代码级）**：
 
 ```bash
-$ grep -rn "GetHttp3\|http3Settings\|http3PriorityParam" tlsgateway/ internal/ cmd/
+$ grep -rn "GetHttp3\|http3Settings\|http3PriorityParam" cloak/ internal/ cmd/
 # 零命中 —— 画像里的 H3 字段没有任何引擎消费
 ```
 
 - `profiles/profiles.go` 定义了完整的 H3 字段（`http3Settings` / `http3SettingsOrder` / `http3PriorityParam` / `http3PseudoHeaderOrder` / `http3SendGreaseFrames`）
 - `profiles/internal_browser_profiles.go` 仅 **Chrome_144**、**Firefox_147/148** 等少量画像带 H3 数据（5 个）
-- `tlsgateway/transport_*.go` **完全不读取**这些字段 → **H3 数据是死代码**
+- `cloak/transport_*.go` **完全不读取**这些字段 → **H3 数据是死代码**
 - `go.mod` 无 quic-go / quic-go-utls 依赖
 - `cmd/verify-fingerprints` 12 个平台**全部是 TCP+TLS+H2 检测，无任何 H3 验证**
 
@@ -46,14 +46,14 @@ $ grep -rn "GetHttp3\|http3Settings\|http3PriorityParam" tlsgateway/ internal/ c
 | 项目 | 语言 | H2 | H3 | H3 指纹 | 协议选择策略 | 实现方式 |
 |---|---|---|---|---|---|---|
 | **本仓库** | Go | ✅ | ❌ | ❌ | H2→H1 降级 | uTLS + x/net/http2 fork |
-| bogdanfinn/tls-client（上游） | Go | ✅ | ✅ | ✅ | **Protocol Racing**（H2 vs H3 赛跑，Chrome 式 Happy Eyeballs） | fhttp + **quic-go-utls** |
+| 同类 Go 库 | Go | ✅ | ✅ | ✅ | **Protocol Racing**（H2 vs H3 赛跑，Chrome 式 Happy Eyeballs） | fhttp + **quic-go-utls** |
 | imroc/req | Go | ✅ | ✅ | ⚠️ 部分 | 自动检测 + 可强制 | quic-go + utls（H3 仅协议层） |
 | curl_cffi / curl-impersonate | Python/C | ✅ | ✅ | ✅ | alt-svc + Happy Eyeballs | curl fork（BoringSSL） |
-| 用户另一仓库 requests (wangluozhe) | Python | ✅ | ✅ | ✅ | — | tls-client (Python 版) |
+| 用户另一仓库 requests (wangluozhe) | Python | ✅ | ✅ | ✅ | — | cloak (Python 版) |
 
-### 2.1 上游 bogdanfinn/tls-client 的 H3 方案（已生产验证）
+### 2.1 其他实现（基于 fhttp + quic-go-utls 的方案）的 H3 方案（已生产验证）
 
-- 依赖 `github.com/bogdanfinn/quic-go-utls`（quic-go 的 fork）+ `fhttp`（net/http 的 fork）
+- 依赖 quic-go 的 fork + fhttp（net/http 的 fork）
 - `racer.go`：`protocolRacer` 并行发起 H2 + H3 连接，**谁先响应用谁**，缓存每域名协议偏好（Chrome 的 Happy Eyeballs 逻辑）
 - 测试 `tests/http3_fingerprint_test.go` 断言 browserleaks 的 H3 指纹：
   ```
@@ -148,12 +148,12 @@ cs.conn = tls.QUICClient(&tls.QUICConfig{ TLSConfig: tlsConf })   // ← 标准 
 
 ### 方案 A1：直接引入 quic-go-utls（对齐上游，最快）
 
-**做法**：引入 `github.com/bogdanfinn/quic-go-utls` + `github.com/bogdanfinn/fhttp`，移植上游 buildHTTP3Transport + racer。
+**做法**：引入 quic-go 的 fork + fhttp，移植类似方案中的 buildHTTP3Transport + racer。
 
 **优点**：上游同款，H3 应用层指纹（SETTINGS/GREASE/Priority/伪头）已验证通过 Cloudflare；画像字段与上游同源，迁移成本低。
 
 **致命缺点（实证）**：
-1. **fhttp 绑架**：quic-go-utls 的 http3 包 18 个文件依赖 `bogdanfinn/fhttp`（net/http fork），`RoundTrip` 签名是 `fhttp.Request` 而非 `net/http.Request` → **与项目"标准 net/http + 零 fork"原则直接冲突**，需要全项目替换为 fhttp 类型
+1. **fhttp 绑架**：quic-go-utls 的 http3 包 18 个文件依赖 fhttp（net/http fork），`RoundTrip` 签名是 `fhttp.Request` 而非 `net/http.Request` → **与项目"标准 net/http + 零 fork"原则直接冲突**，需要全项目替换为 fhttp 类型
 2. **QUIC TLS 指纹缺失**：`crypto_setup.go:96` 用 `tls.QUICClient`（Go 默认 ClientHello），**QUIC 层 TLS 指纹是 Go 的**，过不了严格 H3 指纹检测
 3. 依赖膨胀：引入 fhttp 全家桶
 
@@ -162,12 +162,12 @@ cs.conn = tls.QUICClient(&tls.QUICConfig{ TLSConfig: tlsConf })   // ← 标准 
 ### 方案 A2：官方 quic-go + utls 自建 H3 引擎（推荐 ⭐）
 
 **做法**：
-- 依赖：`github.com/quic-go/quic-go`（官方，纯 QUIC 核心**不依赖 fhttp**）+ `github.com/bogdanfinn/utls`（已是间接依赖）
-- 新增 `tlsgateway/transport_h3.go`：
+- 依赖：官方 quic-go（纯 QUIC 核心**不依赖 fhttp**）+ uTLS（已是间接依赖）
+- 新增 `cloak/transport_h3.go`：
   - 用 quic-go 的 `http3.Transport` 或直接 `quic.DialEarly` 建连
   - **TLS 层注入**：utls 提供 `tls.UQUICClient(config, clientHelloID)` —— 直接支持 QUIC TLS 指纹注入（这是 quic-go-utls 没用的 API，正是超越上游的点）
   - H3 应用层：消费画像 `GetHttp3*` 字段 → SETTINGS 帧（值+顺序+尾部 GREASE）、Priority Param（984832=0x0F0700）、伪头顺序、GREASE 帧
-- 新增 `tlsgateway/racer.go`：Protocol Racing（H2 vs H3 赛跑 + 域名协议缓存），失败降级 H2→H1
+- 新增 `cloak/racer.go`：Protocol Racing（H2 vs H3 赛跑 + 域名协议缓存），失败降级 H2→H1
 - 画像补全：81 画像逐个补 H3 数据（Chrome 系 5 字段一致，Firefox 不同——可从上游画像对照补全）
 - verify-fingerprints 增加 H3 维度：quic.browserleaks.com（h3_text/h3_hash 断言）+ http3.is + Cloudflare trace + Akamai
 
@@ -199,9 +199,9 @@ cs.conn = tls.QUICClient(&tls.QUICConfig{ TLSConfig: tlsConf })   // ← 标准 
 
 考虑到仓库"零 fork 依赖"（H2 层已自 fork x/net/http2）与"标准 net/http 接口"双原则，推荐 A2：
 
-1. **依赖**：`github.com/quic-go/quic-go`（官方）+ `github.com/bogdanfinn/utls`（已有）
-2. **新增 `tlsgateway/transport_h3.go`**：quic-go 建连 + `UQUICClient` 注入画像的 `GetClientHelloId()` + H3 SETTINGS/Priority/伪头/GREASE 帧全按画像
-3. **新增 `tlsgateway/racer.go`**：仿上游 protocolRacer——H2+H3 并行，先到先用，域名级协议缓存；失败自动降级
+1. **依赖**：官方 quic-go + uTLS（已有）
+2. **新增 `cloak/transport_h3.go`**：quic-go 建连 + `UQUICClient` 注入画像的 `GetClientHelloId()` + H3 SETTINGS/Priority/伪头/GREASE 帧全按画像
+3. **新增 `cloak/racer.go`**：仿上游 protocolRacer——H2+H3 并行，先到先用，域名级协议缓存；失败自动降级
 4. **画像补全**：81 画像逐个补 H3 数据（从上游/curl_cffi 对照）
 5. **验证**：verify-fingerprints 增加 H3 维度（quic.browserleaks.com h3_text/h3_hash 断言 + http3.is + Cloudflare trace + Akamai），`go test -race` 全绿
 6. **代理**：H3 走 UDP，代理场景需 SOCKS5 UDP-associate 或 QUIC over CONNECT（可二期）

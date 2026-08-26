@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bogdanfinn/quic-go-utls/internal/synctest"
-	"github.com/bogdanfinn/quic-go-utls/qlog"
-	"github.com/bogdanfinn/quic-go-utls/qlogwriter"
+	"github.com/wuliao6688/quic-go-utls/internal/synctest"
+	"github.com/wuliao6688/quic-go-utls/qlog"
+	"github.com/wuliao6688/quic-go-utls/qlogwriter"
 	"github.com/stretchr/testify/require"
 )
 

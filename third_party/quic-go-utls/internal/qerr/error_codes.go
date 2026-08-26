@@ -3,7 +3,7 @@ package qerr
 import (
 	"fmt"
 
-	tls "github.com/bogdanfinn/utls"
+	tls "github.com/wuliao6688/utls"
 )
 
 // TransportErrorCode is a QUIC transport error.

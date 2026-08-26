@@ -3,7 +3,7 @@ package quic
 import (
 	"sync"
 
-	"github.com/bogdanfinn/quic-go-utls/internal/protocol"
+	"github.com/wuliao6688/quic-go-utls/internal/protocol"
 )
 
 type packetBuffer struct {
