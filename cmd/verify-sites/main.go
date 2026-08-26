@@ -35,30 +35,73 @@ var sites = []struct {
 	WAF  string
 	Note string
 }{
-	// Cloudflare
-	{"https://www.nike.com/", "Cloudflare", "电商头部站"},
-	{"https://www.reddit.com/", "Cloudflare", "社区头部站"},
+	// ── 电商 ──
+	{"https://www.nike.com/", "Akamai", "电商"},
+	{"https://www.shein.com/", "Akamai", "跨境电商"},
+	{"https://www.temu.com/", "Cloudflare", "跨境电商"},
+	{"https://www.zara.com/", "Akamai", "电商"},
+	{"https://www.hm.com/", "Akamai", "电商"},
+	{"https://www.amazon.com/", "Akamai", "电商"},
+	{"https://www.ebay.com/", "AkamaiBM", "电商"},
+	{"https://www.walmart.com/", "Akamai", "电商"},
+	{"https://www.bestbuy.com/", "Akamai", "电商"},
+	{"https://www.target.com/", "Akamai", "电商"},
+	// ── 社交 ──
+	{"https://www.reddit.com/", "Cloudflare", "社区"},
 	{"https://discord.com/login", "Cloudflare", "社交"},
-	{"https://www.zara.com/", "Cloudflare", "电商"},
-	{"https://steamcommunity.com/", "Cloudflare", "游戏社区"},
-	{"https://www.cloudflare.com/cdn-cgi/trace", "Cloudflare", "CF 自测(对照)"},
-	// Akamai
-	{"https://www.akamai.com/", "Akamai", "Akamai 官网(对照)"},
-	{"https://www.dell.com/", "Akamai", "电商"},
-	{"https://www.adobe.com/", "Akamai", "软件"},
-	{"https://www.oracle.com/", "Akamai", "企业"},
-	{"https://www.ebay.com/", "Akamai", "电商"},
-	// DataDome
-	{"https://www.tripadvisor.com/", "DataDome", "点评"},
+	{"https://www.instagram.com/", "Meta", "社交"},
+	{"https://x.com/", "Meta/CF", "社交"},
+	{"https://www.facebook.com/", "Meta", "社交"},
+	{"https://www.pinterest.com/", "Cloudflare", "社交"},
+	{"https://www.linkedin.com/", "Cloudflare", "招聘社交"},
+	// ── 内容/媒体 ──
+	{"https://www.youtube.com/", "Google", "视频"},
+	{"https://www.tiktok.com/", "Cloudflare", "短视频"},
+	{"https://www.quora.com/", "Cloudflare", "问答"},
+	{"https://www.medium.com/", "Cloudflare", "写作"},
+	{"https://www.twitch.tv/", "Cloudflare", "直播"},
 	{"https://www.dailymotion.com/", "DataDome", "视频"},
-	// Imperva
-	{"https://www.blizzard.com/", "Imperva", "游戏"},
-	// PerimeterX / HUMAN
-	{"https://www.urbanoutfitters.com/", "PerimeterX", "电商"},
-	// 国内平台
+	{"https://www.nytimes.com/", "Cloudflare", "新闻"},
+	{"https://www.bbc.com/", "Cloudflare", "新闻"},
+	// ── 游戏 ──
+	{"https://store.epicgames.com/", "Cloudflare", "游戏商店"},
+	{"https://steamcommunity.com/", "Cloudflare", "游戏社区"},
+	// ── 旅游 ──
+	{"https://www.booking.com/", "Akamai", "旅游"},
+	{"https://www.expedia.com/", "Cloudflare", "旅游"},
+	{"https://www.airbnb.com/", "Cloudflare", "民宿"},
+	{"https://www.tripadvisor.com/", "DataDome", "点评"},
+	// ── 招聘 ──
+	{"https://www.indeed.com/", "Cloudflare", "招聘"},
+	{"https://www.glassdoor.com/", "Cloudflare", "招聘点评"},
+	// ── 企业/数据 ──
+	{"https://www.glassdoor.com/", "Cloudflare", "企业"},
+	{"https://www.oracle.com/", "Akamai", "企业"},
+	// ── 对照站 ──
+	{"https://www.cloudflare.com/cdn-cgi/trace", "Cloudflare", "CF 对照"},
+	{"https://www.akamai.com/", "Akamai", "Akamai 对照"},
+	{"https://tls.peet.ws/api/all", "TLS测试", "指纹对照"},
+	// ── 国内电商 ──
+	{"https://www.taobao.com/", "国内", "淘宝"},
+	{"https://www.jd.com/", "国内", "京东"},
+	{"https://www.pinduoduo.com/", "国内", "拼多多"},
+	{"https://www.1688.com/", "国内", "1688"},
+	// ── 国内内容/社交 ──
 	{"https://www.zhihu.com/", "国内", "知乎"},
+	{"https://www.xiaohongshu.com/", "国内", "小红书"},
+	{"https://www.douyin.com/", "国内", "抖音"},
+	{"https://weibo.com/", "国内", "微博"},
+	{"https://www.bilibili.com/", "国内", "B站"},
 	{"https://www.baidu.com/", "国内", "百度"},
 	{"https://www.toutiao.com/", "国内", "头条"},
+	// ── 国内招聘/企业 ──
+	{"https://www.zhipin.com/", "国内", "BOSS直聘"},
+	{"https://www.tianyancha.com/", "国内", "天眼查"},
+	{"https://www.qcc.com/", "国内", "企查查"},
+	// ── 国内旅游 ──
+	{"https://www.ctrip.com/", "国内", "携程"},
+	{"https://hotels.ctrip.com/", "国内", "携程酒店"},
+	{"https://www.qunar.com/", "国内", "去哪儿"},
 }
 
 func main() {
