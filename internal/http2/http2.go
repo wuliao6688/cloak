@@ -14,7 +14,6 @@
 package http2 // import "golang.org/x/net/http2"
 
 import (
-	"bufio"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -22,7 +21,6 @@ import (
 	"net/http"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -212,21 +210,6 @@ func validWireHeaderFieldName(v string) bool {
 	return true
 }
 
-func httpCodeString(code int) string {
-	switch code {
-	case 200:
-		return "200"
-	case 404:
-		return "404"
-	}
-	return strconv.Itoa(code)
-}
-
-// from pkg io
-type stringWriter interface {
-	WriteString(s string) (n int, err error)
-}
-
 // A closeWaiter is like a sync.WaitGroup but only goes 1 to 0 (open to closed).
 type closeWaiter chan struct{}
 
@@ -246,71 +229,6 @@ func (cw closeWaiter) Close() {
 // Wait waits for the closeWaiter to become closed.
 func (cw closeWaiter) Wait() {
 	<-cw
-}
-
-// bufferedWriter is a buffered writer that writes to w.
-// Its buffered writer is lazily allocated as needed, to minimize
-// idle memory usage with many connections.
-type bufferedWriter struct {
-	_           incomparable
-	conn        net.Conn      // immutable
-	bw          *bufio.Writer // non-nil when data is buffered
-	byteTimeout time.Duration // immutable, WriteByteTimeout
-}
-
-func newBufferedWriter(conn net.Conn, timeout time.Duration) *bufferedWriter {
-	return &bufferedWriter{
-		conn:        conn,
-		byteTimeout: timeout,
-	}
-}
-
-// bufWriterPoolBufferSize is the size of bufio.Writer's
-// buffers created using bufWriterPool.
-//
-// TODO: pick a less arbitrary value? this is a bit under
-// (3 x typical 1500 byte MTU) at least. Other than that,
-// not much thought went into it.
-const bufWriterPoolBufferSize = 4 << 10
-
-var bufWriterPool = sync.Pool{
-	New: func() interface{} {
-		return bufio.NewWriterSize(nil, bufWriterPoolBufferSize)
-	},
-}
-
-func (w *bufferedWriter) Available() int {
-	if w.bw == nil {
-		return bufWriterPoolBufferSize
-	}
-	return w.bw.Available()
-}
-
-func (w *bufferedWriter) Write(p []byte) (n int, err error) {
-	if w.bw == nil {
-		bw := bufWriterPool.Get().(*bufio.Writer)
-		bw.Reset((*bufferedWriterTimeoutWriter)(w))
-		w.bw = bw
-	}
-	return w.bw.Write(p)
-}
-
-func (w *bufferedWriter) Flush() error {
-	bw := w.bw
-	if bw == nil {
-		return nil
-	}
-	err := bw.Flush()
-	bw.Reset(nil)
-	bufWriterPool.Put(bw)
-	w.bw = nil
-	return err
-}
-
-type bufferedWriterTimeoutWriter bufferedWriter
-
-func (w *bufferedWriterTimeoutWriter) Write(p []byte) (n int, err error) {
-	return writeWithByteTimeout(w.conn, w.byteTimeout, p)
 }
 
 // writeWithByteTimeout writes to conn.
