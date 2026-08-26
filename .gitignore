@@ -16,3 +16,4 @@ cffi_dist/tls_client_cffi
 *.so
 fingerprint_verification_report.json
 verify-fingerprints
+verify-sites
