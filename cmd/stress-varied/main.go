@@ -571,7 +571,6 @@ func reuseWorker(ctx context.Context, bases []string, wg *sync.WaitGroup) {
 // worker that builds a FRESH Request each time (creation-path stress)
 func freshWorker(ctx context.Context, bases []string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	localReqs := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -601,12 +600,144 @@ func freshWorker(ctx context.Context, bases []string, wg *sync.WaitGroup) {
 		if tr, ok := hc.Transport.(interface{ CloseIdleConnections() }); ok {
 			tr.CloseIdleConnections()
 		}
-		// Release pooled Request clients too.
-		localReqs++
-		closeAllReqs() // aggressive: every iteration, for leak isolation
-		if localReqs%100 == 0 {
-			_ = localReqs
+	}
+}
+
+// longLivedWorker simulates the REAL user pattern: a single goroutine
+// holds ONE Request object for a long time and repeatedly calls it,
+// mutating headers/cookies/query params between calls. This is how
+// scraping/automation code actually behaves (one session, many requests,
+// state changes along the way).
+func longLivedWorker(ctx context.Context, bases []string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	// Create ONE long-lived session object.
+	req := cloak.ImpersonateRequest(randProfile())
+	defer req.CloseIdleConnections()
+	base := bases[rand.Intn(len(bases))]
+
+	mutations := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
 		}
+
+		// Mutate state before each request — headers/cookies/query rotate.
+		mutations++
+		req = req.
+			SetHeader("X-Session", fmt.Sprintf("sess-%d", rand.Intn(1000))).
+			SetHeader("X-Mutation", fmt.Sprintf("m%d", mutations%100)).
+			SetQueryParam("page", fmt.Sprintf("%d", rand.Intn(100)))
+		if rand.Intn(3) == 0 {
+			req = req.SetCookies(&http.Cookie{Name: "sid", Value: fmt.Sprintf("%d", rand.Intn(100000))})
+		}
+		if rand.Intn(4) == 0 {
+			req = req.SetBasicAuth("user", "pass")
+		}
+
+		// Random method/body like real mixed usage.
+		start := time.Now()
+		var err error
+		var resp *cloak.Response
+		switch rand.Intn(4) {
+		case 0:
+			resp, err = req.Get(base + "/echo")
+		case 1:
+			resp, err = req.Post(base + "/echo")
+		case 2:
+			resp, err = req.Get(base + "/json")
+		default:
+			resp, err = req.Post(base + "/json")
+		}
+		recordLatency(time.Since(start))
+		totalReq.Add(1)
+		if err != nil {
+			if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "context deadline") {
+				totalOK.Add(1)
+			} else {
+				totalFail.Add(1)
+				incFail("longlived: " + err.Error())
+			}
+			continue
+		}
+		_ = resp.String() // drain
+		totalOK.Add(1)
+		incStatus(resp.StatusCode)
+	}
+}
+
+// createDestroyWorker simulates heavy object churn: create → use briefly →
+// destroy → recreate. Each object lives only for a few requests before
+// CloseIdleConnections (the pattern in batch/task workers).
+func createDestroyWorker(ctx context.Context, bases []string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	base := bases[rand.Intn(len(bases))]
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		// Object lifetime: 1-8 requests, then destroy.
+		lifetime := 1 + rand.Intn(8)
+		req := cloak.ImpersonateRequest(randProfile())
+		for i := 0; i < lifetime; i++ {
+			select {
+			case <-ctx.Done():
+				req.CloseIdleConnections()
+				return
+			default:
+			}
+			req = req.SetHeader("X-Obj", fmt.Sprintf("o%d-%d", lifetime, i)).
+				SetQueryParam("n", fmt.Sprintf("%d", rand.Intn(1000)))
+			start := time.Now()
+			resp, err := req.Get(base + "/echo")
+			recordLatency(time.Since(start))
+			totalReq.Add(1)
+			if err != nil {
+				totalFail.Add(1)
+				incFail("createdestroy: " + err.Error())
+				break
+			}
+			_ = resp.String() // drain
+			totalOK.Add(1)
+			incStatus(resp.StatusCode)
+		}
+		req.CloseIdleConnections() // destroy the object
+	}
+}
+
+// proxyWorker routes requests through a local forward proxy, exercising
+// the proxy path under load. The proxy itself is a cloak.Proxy instance.
+func proxyWorker(ctx context.Context, proxyAddr, target string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	tr := cloak.NewTransportWithOptions(randProfile(), cloak.TransportOptions{
+		Proxy: func(*http.Request) (*url.URL, error) {
+			return url.Parse("http://" + proxyAddr)
+		},
+	})
+	defer tr.CloseIdleConnections()
+	client := &http.Client{Transport: tr, Timeout: 5 * time.Second}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		start := time.Now()
+		resp, err := client.Get(target)
+		recordLatency(time.Since(start))
+		totalReq.Add(1)
+		if err != nil {
+			totalFail.Add(1)
+			incFail("proxy: " + err.Error())
+			continue
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		totalOK.Add(1)
+		incStatus(resp.StatusCode)
 	}
 }
 
@@ -783,22 +914,37 @@ func main() {
 
 	var wg sync.WaitGroup
 	// Mix workers based on env flags for leak isolation:
-	//   NO_H3=1   disable H3 workers
-	//   NO_FRESH=1 disable fresh workers (only reuse)
+	//   NO_H3=1     disable H3 workers
+	//   NO_FRESH=1  disable fresh workers
+	//   NO_PROXY=1  disable proxy worker
 	noH3 := os.Getenv("NO_H3") == "1"
 	noFresh := os.Getenv("NO_FRESH") == "1"
-	fmt.Printf("Workers: H3=%v Fresh=%v\n", !noH3, !noFresh)
+	noProxy := os.Getenv("NO_PROXY") == "1"
+	fmt.Printf("Workers: H3=%v Fresh=%v Proxy=%v\n", !noH3, !noFresh, !noProxy)
+	fmt.Printf("Worker mix: reuse=30%% fresh=20%% longLived=30%% createDestroy=20%%\n")
 
-	// mix: 70% reuse workers (connection pooling) + 30% fresh workers
+	// 4 real-usage worker patterns + H3:
+	//   reuse        — one client, many requests (connection pooling)
+	//   fresh        — new client per request (creation cost)
+	//   longLived    — ONE Request object, many requests with header/cookie
+	//                  mutations between calls (real scraping pattern)
+	//   createDestroy— create → use a few → destroy (batch/task pattern)
+	mode := func(i int) int { return i % 10 }
 	for i := 0; i < concurrency; i++ {
-		if noFresh && i%10 >= 7 {
-			continue
+		m := mode(i)
+		if noFresh && (m == 2 || m == 8) {
+			m = 0
 		}
 		wg.Add(1)
-		if i%10 < 7 {
+		switch m {
+		case 0, 1, 2: // reuse
 			go reuseWorker(ctx, bases, &wg)
-		} else {
+		case 3, 4: // fresh
 			go freshWorker(ctx, bases, &wg)
+		case 5, 6, 7: // long-lived session object
+			go longLivedWorker(ctx, bases, &wg)
+		default: // create/destroy
+			go createDestroyWorker(ctx, bases, &wg)
 		}
 	}
 
@@ -843,6 +989,21 @@ func main() {
 					}
 				}
 			}()
+		}
+	}
+
+	// Proxy worker: start a local forward proxy and route requests through
+	// it (exercises the proxy path — CONNECT tunneling + forwarding).
+	if !noProxy {
+		pln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err == nil {
+			proxyAddr := pln.Addr().String()
+			pln.Close()
+			px := cloak.NewProxy(proxyAddr, profiles.Chrome_150)
+			go px.ListenAndServe()
+			wg.Add(1)
+			go proxyWorker(ctx, proxyAddr, h1URL+"/echo", &wg)
+			fmt.Printf("Forward proxy:  http://%s\n", proxyAddr)
 		}
 	}
 

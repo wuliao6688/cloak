@@ -45,6 +45,14 @@ func (h *HeaderRoundTripper) Unwrap() http.RoundTripper {
 	return h.transport
 }
 
+// CloseIdleConnections closes idle keep-alive connections in the inner
+// transport (leak prevention for long-running workers).
+func (h *HeaderRoundTripper) CloseIdleConnections() {
+	if tr, ok := h.transport.(interface{ CloseIdleConnections() }); ok {
+		tr.CloseIdleConnections()
+	}
+}
+
 // browserHeaders returns browser-appropriate HTTP headers for the profile.
 func browserHeaders(profile profiles.ClientProfile) map[string]string {
 	// If the user already sets their own headers, don't override.
