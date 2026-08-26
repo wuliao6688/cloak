@@ -10,12 +10,17 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/wuliao6688/cloak/profiles"
 )
 
 // Request is a fluent HTTP request builder (req-style).
 // Create via ImpersonateRequest(profile).Get(url).
 type Request struct {
 	client  *http.Client
+	profile profiles.ClientProfile
+	pooled  bool // true when client is a shared pooled transport
+
 	method  string
 	url     string
 	headers map[string]string
@@ -256,6 +261,33 @@ func (r *Request) buildURL() string {
 	return u
 }
 
+// CloseIdleConnections releases this Request's reference on the shared
+// per-profile transport and closes idle connections when the last user is
+// done. Call it when a Request is no longer needed, e.g. in long-running
+// workers. For non-pooled Requests (built via ImpersonateChain) it closes
+// that request's own transport.
+func (r *Request) CloseIdleConnections() {
+	if r.client == nil {
+		return
+	}
+	if r.pooled {
+		releasePooledClient(r.profile)
+		r.pooled = false
+		return
+	}
+	if r.client.Transport != nil {
+		if tr, ok := r.client.Transport.(interface{ CloseIdleConnections() }); ok {
+			tr.CloseIdleConnections()
+		}
+	}
+}
+
+// Release is an alias for CloseIdleConnections (matches req-style naming
+// for releasing pooled resources).
+func (r *Request) Release() {
+	r.CloseIdleConnections()
+}
+
 // Get executes a GET request.
 func (r *Request) Get(urlStr string) (*Response, error) {
 	r.method = "GET"
@@ -291,6 +323,14 @@ func (r *Request) executeWithRetry() (*Response, error) {
 			if !r.retryCondition(resp, err) {
 				return resp, nil
 			}
+		}
+		// The response will be retried — drain and close its body NOW.
+		// Otherwise the connection + its setRequestCancel goroutine leak
+		// on every non-2xx response (found by 1h stress test: retry loop
+		// with 429 responses leaked thousands of goroutines).
+		if resp != nil && resp.Response != nil && resp.Response.Body != nil {
+			_, _ = io.Copy(io.Discard, resp.Response.Body)
+			_ = resp.Response.Body.Close()
 		}
 		lastResp = resp
 		lastErr = err

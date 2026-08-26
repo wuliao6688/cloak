@@ -376,9 +376,17 @@ func trunc(s string, n int) string {
 //	    SetRetry(3, cloak.RetryOnServerError, 1*time.Second, 10*time.Second).
 //	    SetDump(cloak.DefaultDumpOptions()).
 //	    Get("https://api.example.com/user")
+// ImpersonateRequest returns a fluent Request builder backed by a SHARED
+// per-profile Transport (see pool.go). Connections are pooled and reused
+// across calls, so creating many Requests does not leak connections.
+//
+// Each call increments the shared transport's refcount; call
+// (*Request).CloseIdleConnections() (or Request.Release) when the request
+// is no longer needed to release the refcount and close idle connections
+// when the last user is done.
 func ImpersonateRequest(profile profiles.ClientProfile) *Request {
-	client := Impersonate(profile)
-	return &Request{client: client}
+	client := getPooledClient(profile)
+	return &Request{client: client, profile: profile, pooled: true}
 }
 
 // DevMode creates an impersonated Client with full debug dump enabled.

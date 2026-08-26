@@ -146,6 +146,10 @@ func startLocalServers() (h1URL, h2URL, h3URL string, cleanup func()) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"method": r.Method, "body": string(body), "proto": r.Proto})
 	})
+	// Status endpoints (for retry/error scenarios).
+	mux.HandleFunc("/status/404", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) })
+	mux.HandleFunc("/status/500", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(500) })
+	mux.HandleFunc("/status/429", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(429) })
 
 	// H1 (plain)
 	h1 := httptest.NewServer(mux)
@@ -314,157 +318,210 @@ func do(c *http.Client, m, u string, body io.Reader, hdr map[string]string, cook
 	return c.Do(req)
 }
 
+// reqPool tracks all Request builder instances created by scenarios so
+// the worker can CloseIdleConnections on them (prevents connection/goroutine
+// leaks in long runs — each ImpersonateRequest creates a fresh client).
+var reqPool = struct {
+	sync.Mutex
+	reqs []*cloak.Request
+}{}
+
+// newReq creates a Request builder and registers it for cleanup.
+func newReq() *cloak.Request {
+	r := cloak.ImpersonateRequest(randProfile())
+	reqPool.Lock()
+	reqPool.reqs = append(reqPool.reqs, r)
+	reqPool.Unlock()
+	return r
+}
+
+// closeAllReqs releases all pooled Request clients (called periodically
+// by workers). This is the equivalent of client.CloseIdleConnections for
+// the Request builder API.
+func closeAllReqs() {
+	reqPool.Lock()
+	defer reqPool.Unlock()
+	for _, r := range reqPool.reqs {
+		r.CloseIdleConnections()
+	}
+	reqPool.reqs = reqPool.reqs[:0]
+}
+
 func randomScenario() scenario {
 	n := rand.Intn(100)
 	switch {
-	// 1. POST with random body type (the workhorse)
-	case n < 30:
-		btName := randBodyType()
-		body, ct := buildBody(btName)
-		return scenario{name: "post_" + btName, run: func(c *http.Client, base string) error {
-			hdr := map[string]string{}
-			if ct != "" {
-				hdr["Content-Type"] = ct
-			}
-			resp, err := do(c, "POST", base+"/echo", body, hdr, nil)
+	// 1. Request builder chain: SetHeader+SetQueryParam+SetCookies+Get+String()
+	case n < 12:
+		return scenario{name: "req_chain_get", run: func(c *http.Client, base string) error {
+			req := newReq().
+				SetHeader("X-Trace", fmt.Sprintf("t%d", rand.Intn(1000))).
+				SetHeaderNonCanonical("x-lower", "v").
+				SetQueryParam("q", fmt.Sprintf("q%d", rand.Intn(100))).
+				SetCookies(&http.Cookie{Name: "sess", Value: fmt.Sprintf("s%d", rand.Intn(1000))}).
+				SetBaseURL(base)
+			resp, err := req.Get("/echo")
 			if err != nil { return err }
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 { return fmt.Errorf("status %d", resp.StatusCode) }
+			s := resp.String()
+			if !strings.Contains(s, "sess=") { return fmt.Errorf("cookie not echoed: %s", s[:min(80, len(s))]) }
+			if resp.IsError() { return fmt.Errorf("IsError on 200") }
+			if !resp.IsSuccess() { return fmt.Errorf("IsSuccess false") }
+			if resp.ResultState() != cloak.ResultSuccess { return fmt.Errorf("ResultState=%d", resp.ResultState()) }
 			incStatus(resp.StatusCode)
 			return nil
 		}}
-	// 2. POST with header mutation (same client, different headers)
-	case n < 40:
-		return scenario{name: "post_header_mutation", run: func(c *http.Client, base string) error {
-			// random header set each time
-			hdr := map[string]string{
-				"X-Random-" + fmt.Sprint(rand.Intn(5)): fmt.Sprintf("h%d", rand.Intn(1000)),
-				"Content-Type": "application/json",
-			}
-			if rand.Intn(2) == 0 {
-				hdr["Accept-Language"] = []string{"en-US", "zh-CN", "ja-JP", "ko-KR"}[rand.Intn(4)]
-			}
-			resp, err := do(c, "POST", base+"/echo", strings.NewReader(`{"a":1}`), hdr, nil)
+	// 2. SetBody(JSON bytes) + Post + UnmarshalJson
+	case n < 24:
+		return scenario{name: "req_bodyjson_post", run: func(c *http.Client, base string) error {
+			var in = map[string]any{"ping": "pong", "n": rand.Intn(1000)}
+			b, _ := json.Marshal(in)
+			resp, err := newReq().
+				SetBaseURL(base).
+				SetBody(bytes.NewReader(b)).
+				SetHeader("Content-Type", "application/json").
+				Post("/json")
 			if err != nil { return err }
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 { return fmt.Errorf("status %d", resp.StatusCode) }
+			var out map[string]any
+			if err := resp.UnmarshalJson(&out); err != nil { return err }
+			if out["ping"] != "pong" { return fmt.Errorf("json round-trip mismatch") }
+			if len(resp.BodyBytes()) == 0 { return fmt.Errorf("BodyBytes empty") }
 			incStatus(resp.StatusCode)
 			return nil
 		}}
-	// 3. POST with cookie mutation (same client, different cookies)
+	// 3. SetBodyString + content-type + Post + Bytes
+	case n < 34:
+		return scenario{name: "req_bodystring_post", run: func(c *http.Client, base string) error {
+			resp, err := newReq().
+				SetBaseURL(base).
+				SetBodyString(fmt.Sprintf("raw-%d", rand.Intn(1000))).
+				SetHeader("Content-Type", "text/plain").
+				Post("/echo")
+			if err != nil { return err }
+			if len(resp.Bytes()) == 0 { return fmt.Errorf("Bytes empty") }
+			if _, err := resp.ToString(); err != nil { return err }
+			incStatus(resp.StatusCode)
+			return nil
+		}}
+	// 4. SetOrderedFormData (multipart-style) + Post
+	case n < 42:
+		return scenario{name: "req_orderedform_post", run: func(c *http.Client, base string) error {
+			resp, err := newReq().
+				SetBaseURL(base).
+				SetOrderedFormData("name", fmt.Sprintf("u%d", rand.Intn(1000)), "k", "v").
+				Post("/echo")
+			if err != nil { return err }
+			if resp.IsError() { return fmt.Errorf("form post failed") }
+			_ = resp.String() // drain body — else setRequestCancel goroutine leaks
+			incStatus(resp.StatusCode)
+			return nil
+		}}
+	// 5. Auth variants
 	case n < 50:
-		return scenario{name: "post_cookie_mutation", run: func(c *http.Client, base string) error {
-			cookies := []*http.Cookie{
-				{Name: "sess", Value: fmt.Sprintf("s%d", rand.Intn(100000))},
-				{Name: "cid", Value: fmt.Sprintf("c%d", rand.Intn(100000))},
-			}
+		return scenario{name: "req_auth", run: func(c *http.Client, base string) error {
+			var req *cloak.Request
 			if rand.Intn(2) == 0 {
-				cookies = append(cookies, &http.Cookie{Name: "extra", Value: "e"})
+				req = newReq().SetBasicAuth("user", "pass")
+			} else {
+				req = newReq().SetBearerAuthToken("tok-" + fmt.Sprint(rand.Intn(1000)))
 			}
-			resp, err := do(c, "POST", base+"/echo", strings.NewReader(`{"c":1}`), nil, cookies)
+			resp, err := req.SetBaseURL(base).Get("/echo")
 			if err != nil { return err }
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 { return fmt.Errorf("status %d", resp.StatusCode) }
+			s := resp.String()
+			if !strings.Contains(s, "Basic") && !strings.Contains(s, "Bearer") {
+				return fmt.Errorf("auth header not echoed")
+			}
 			incStatus(resp.StatusCode)
 			return nil
 		}}
-	// 4. Full method matrix
-	case n < 62:
+	// 6. OnRequest hook
+	case n < 57:
+		return scenario{name: "req_onrequest_hook", run: func(c *http.Client, base string) error {
+			var hookCalled atomic.Int32
+			resp, err := newReq().
+				SetBaseURL(base).
+				OnRequest(func(req *http.Request) error {
+					hookCalled.Add(1)
+					req.Header.Set("X-Hook", "yes")
+					return nil
+				}).
+				Get("/echo")
+			if err != nil { return err }
+			if hookCalled.Load() == 0 { return fmt.Errorf("OnRequest hook not called") }
+			_ = resp.String() // drain body — else setRequestCancel goroutine leaks
+			incStatus(resp.StatusCode)
+			return nil
+		}}
+	// 8. Retry
+	case n < 65:
+		return scenario{name: "req_retry", run: func(c *http.Client, base string) error {
+			var attempts atomic.Int32
+			resp, err := newReq().
+				SetBaseURL(base).
+				OnRequest(func(req *http.Request) error {
+					attempts.Add(1)
+					return nil
+				}).
+				SetRetry(2, func(resp *cloak.Response, err error) bool {
+					return err == nil && resp != nil && resp.StatusCode == 429
+				}, 10*time.Millisecond, 50*time.Millisecond).
+				Get("/status/429")
+			if err != nil { return err }
+			_ = resp.String() // drain final 429 body — else setRequestCancel goroutine leaks
+			if attempts.Load() < 2 { return fmt.Errorf("retry not triggered, attempts=%d", attempts.Load()) }
+			incStatus(resp.StatusCode)
+			return nil
+		}}
+	// 9. Charset decode via Response.String()
+	case n < 72:
+		return scenario{name: "req_charset", run: func(c *http.Client, base string) error {
+			resp, err := newReq().SetBaseURL(base).Get("/euckr")
+			if err != nil { return err }
+			s := resp.String()
+			if !strings.Contains(s, "한국어") { return fmt.Errorf("EUC-KR decode failed: %q", s) }
+			incStatus(resp.StatusCode)
+			return nil
+		}}
+	// 10. UnmarshalXml
+	case n < 76:
+		return scenario{name: "req_unmarshal_xml", run: func(c *http.Client, base string) error {
+			resp, err := newReq().
+				SetBaseURL(base).
+				SetHeader("Accept", "application/xml").
+				Get("/echo")
+			if err != nil { return err }
+			// JSON body into xml → error expected is fine; the call itself must not panic
+			var v any
+			_ = resp.UnmarshalXml(&v)
+			incStatus(resp.StatusCode)
+			return nil
+		}}
+	// 11. Low-level full method matrix (bypass Request builder)
+	case n < 88:
 		m := methodPool[rand.Intn(len(methodPool))]
 		return scenario{name: "method_" + m, run: func(c *http.Client, base string) error {
 			var body io.Reader
 			if m == "POST" || m == "PUT" || m == "PATCH" {
 				body = strings.NewReader(fmt.Sprintf("m%d", rand.Intn(100)))
 			}
-			resp, err := do(c, m, base+"/any?q=v"+fmt.Sprint(rand.Intn(100)), body, nil, nil)
+			req, err := http.NewRequest(m, base+"/any?q=v"+fmt.Sprint(rand.Intn(100)), body)
 			if err != nil { return err }
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 { return fmt.Errorf("status %d", resp.StatusCode) }
-			incStatus(resp.StatusCode)
-			return nil
-		}}
-	// 5. JSON round-trip
-	case n < 70:
-		return scenario{name: "json_rt", run: func(c *http.Client, base string) error {
-			var in = map[string]any{"ping": "pong", "n": rand.Intn(1000)}
-			b, _ := json.Marshal(in)
-			resp, err := do(c, "POST", base+"/json", bytes.NewReader(b), map[string]string{"Content-Type": "application/json"}, nil)
-			if err != nil { return err }
-			defer resp.Body.Close()
-			var out map[string]any
-			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil { return err }
-			if out["ping"] != "pong" { return fmt.Errorf("json mismatch") }
-			incStatus(resp.StatusCode)
-			return nil
-		}}
-	// 6. Redirect follow
-	case n < 74:
-		return scenario{name: "redirect_follow", run: func(c *http.Client, base string) error {
-			resp, err := do(c, "GET", base+"/redirect", nil, nil, nil)
-			if err != nil { return err }
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 { return fmt.Errorf("redirect chain failed: %d", resp.StatusCode) }
-			incStatus(resp.StatusCode)
-			return nil
-		}}
-	// 7. Charset decode (EUC-KR)
-	case n < 78:
-		return scenario{name: "charset_euckr", run: func(c *http.Client, base string) error {
-			resp, err := do(c, "GET", base+"/euckr", nil, nil, nil)
-			if err != nil { return err }
-			defer resp.Body.Close()
-			body, _ := io.ReadAll(resp.Body)
-			// raw EUC-KR bytes should contain the UTF-8 representation after decode;
-			// cloak's Response.String() does the decode, but here we use raw client:
-			// verify the server actually sent EUC-KR (not UTF-8)
-			if bytes.Contains(body, []byte("한국어")) {
-				return fmt.Errorf("expected EUC-KR bytes, got UTF-8")
-			}
-			incStatus(resp.StatusCode)
-			return nil
-		}}
-	// 8. Timeout
-	case n < 82:
-		return scenario{name: "timeout", run: func(c *http.Client, base string) error {
-			c.Timeout = 300 * time.Millisecond
-			defer func() { c.Timeout = 5 * time.Second }()
-			_, err := do(c, "GET", base+"/slow", nil, nil, nil)
-			if err == nil { return fmt.Errorf("slow endpoint should timeout") }
-			return nil
-		}}
-	// 9. Error status handling
-	case n < 87:
-		return scenario{name: "status_err", run: func(c *http.Client, base string) error {
-			paths := []string{"/status/404", "/status/500", "/status/429"}
-			p := paths[rand.Intn(len(paths))]
-			resp, err := do(c, "GET", base+p, nil, nil, nil)
-			if err != nil { return err }
-			defer resp.Body.Close()
-			incStatus(resp.StatusCode)
-			return nil
-		}}
-	// 10. Auth
-	case n < 91:
-		return scenario{name: "auth", run: func(c *http.Client, base string) error {
-			req, _ := http.NewRequest("GET", base+"/echo", nil)
-			if rand.Intn(2) == 0 {
-				req.SetBasicAuth("user", "pass")
-			} else {
-				req.Header.Set("Authorization", "Bearer tok-"+fmt.Sprint(rand.Intn(1000)))
-			}
+			req.Header.Set("User-Agent", "stress-varied")
 			resp, err := c.Do(req)
 			if err != nil { return err }
-			defer resp.Body.Close()
+			defer func() {
+				io.Copy(io.Discard, resp.Body) // drain for connection reuse
+				resp.Body.Close()
+			}()
 			if resp.StatusCode != 200 { return fmt.Errorf("status %d", resp.StatusCode) }
 			incStatus(resp.StatusCode)
 			return nil
 		}}
-	// 11. Protocol check (H2 vs H1 — different base URLs)
+	// 12. Redirect via Request builder
 	default:
-		return scenario{name: "proto_check", run: func(c *http.Client, base string) error {
-			resp, err := do(c, "GET", base+"/any", nil, nil, nil)
+		return scenario{name: "req_redirect", run: func(c *http.Client, base string) error {
+			resp, err := newReq().SetBaseURL(base).Get("/redirect")
 			if err != nil { return err }
-			defer resp.Body.Close()
+			if resp.StatusCode != 200 { return fmt.Errorf("redirect chain failed: %d", resp.StatusCode) }
+			_ = resp.String() // drain body — else setRequestCancel goroutine leaks
 			incStatus(resp.StatusCode)
 			return nil
 		}}
@@ -476,6 +533,7 @@ func reuseWorker(ctx context.Context, bases []string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	client := cloak.Impersonate(randProfile()) // one client, reused
 	client.Timeout = 5 * time.Second
+	localReqs := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -498,12 +556,22 @@ func reuseWorker(ctx context.Context, bases []string, wg *sync.WaitGroup) {
 		} else {
 			totalOK.Add(1)
 		}
+		// Release pooled Request clients created by this worker's
+		// Request-builder scenarios (leak prevention).
+		localReqs++
+		if os.Getenv("NO_CLEAN") != "1" {
+			closeAllReqs() // aggressive: every iteration, for leak isolation
+		}
+		if localReqs%100 == 0 {
+			_ = localReqs
+		}
 	}
 }
 
 // worker that builds a FRESH Request each time (creation-path stress)
 func freshWorker(ctx context.Context, bases []string, wg *sync.WaitGroup) {
 	defer wg.Done()
+	localReqs := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -528,13 +596,77 @@ func freshWorker(ctx context.Context, bases []string, wg *sync.WaitGroup) {
 		} else {
 			totalOK.Add(1)
 		}
+		// Fresh client per iteration: must close idle connections to avoid
+		// keep-alive goroutine leaks (the real leak this stress found).
+		if tr, ok := hc.Transport.(interface{ CloseIdleConnections() }); ok {
+			tr.CloseIdleConnections()
+		}
+		// Release pooled Request clients too.
+		localReqs++
+		closeAllReqs() // aggressive: every iteration, for leak isolation
+		if localReqs%100 == 0 {
+			_ = localReqs
+		}
 	}
 }
+
+// dumpStacks enables goroutine signature dumping at exit (leak diagnosis).
+var dumpStacks bool
 
 func printStats(duration time.Duration, memStart runtime.MemStats, goroutineStart int) {
 	runtime.GC()
 	var memEnd runtime.MemStats
 	runtime.ReadMemStats(&memEnd)
+
+	// If -dump flag set, print goroutine stack signatures before stats.
+	if dumpStacks {
+		buf := make([]byte, 64<<20) // 64MB buffer for full goroutine dump
+		n := runtime.Stack(buf, true)
+		lines := strings.Split(string(buf[:n]), "\n")
+		sigCount := map[string]int{}
+		for i := 0; i < len(lines); i++ {
+			if strings.HasPrefix(lines[i], "goroutine ") {
+				// First function frame = what the goroutine is blocked on
+				first := ""
+				for j := 1; j <= 6 && i+j < len(lines); j++ {
+					line := strings.TrimSpace(lines[i+j])
+					if strings.HasPrefix(line, "created by") {
+						break
+					}
+					if line != "" {
+						first = line
+						break
+					}
+				}
+				// normalize: strip args in parens
+				if idx := strings.Index(first, "("); idx > 0 {
+					first = first[:idx]
+				}
+				sigCount[first]++
+			}
+		}
+		fmt.Printf("\n=== GOROUTINE SIGNATURES (top 15) ===\n")
+		type sg struct {
+			sig string
+			n   int
+		}
+		var sgs []sg
+		for s, n := range sigCount {
+			sgs = append(sgs, sg{s, n})
+		}
+		sort.Slice(sgs, func(i, j int) bool { return sgs[i].n > sgs[j].n })
+		totalG := 0
+		for _, s := range sgs {
+			totalG += s.n
+		}
+		fmt.Printf("  total goroutines: %d\n", totalG)
+		for i, s := range sgs {
+			if i >= 15 {
+				break
+			}
+			fmt.Printf("  ×%d  %s\n", s.n, s.sig)
+		}
+	}
 
 	fmt.Printf("\n=== STRESS-VARIED REPORT ===\n")
 	fmt.Printf("Duration:      %v\n", duration)
@@ -593,6 +725,9 @@ func main() {
 	if len(os.Args) > 2 {
 		fmt.Sscanf(os.Args[2], "%d", &concurrency)
 	}
+	if len(os.Args) > 3 && os.Args[3] == "-dump" {
+		dumpStacks = true
+	}
 
 	fmt.Printf("=== cloak STRESS-VARIED (multi-feature random) ===\n")
 	fmt.Printf("Duration:    %v\n", duration)
@@ -647,8 +782,18 @@ func main() {
 	bases := []string{h1URL, h2URL}
 
 	var wg sync.WaitGroup
+	// Mix workers based on env flags for leak isolation:
+	//   NO_H3=1   disable H3 workers
+	//   NO_FRESH=1 disable fresh workers (only reuse)
+	noH3 := os.Getenv("NO_H3") == "1"
+	noFresh := os.Getenv("NO_FRESH") == "1"
+	fmt.Printf("Workers: H3=%v Fresh=%v\n", !noH3, !noFresh)
+
 	// mix: 70% reuse workers (connection pooling) + 30% fresh workers
 	for i := 0; i < concurrency; i++ {
+		if noFresh && i%10 >= 7 {
+			continue
+		}
 		wg.Add(1)
 		if i%10 < 7 {
 			go reuseWorker(ctx, bases, &wg)
@@ -658,41 +803,47 @@ func main() {
 	}
 
 	// H3 worker: exercises QUIC transport against the local H3 server
-	h3Stress := cloak.NewH3TransportWithOptions(profiles.Chrome_150, cloak.TransportOptions{InsecureSkipVerify: true})
-	defer h3Stress.CloseIdleConnections()
-	h3StressClient := &http.Client{Transport: h3Stress, Timeout: 5 * time.Second}
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
+	if !noH3 {
+		h3Stress := cloak.NewH3TransportWithOptions(profiles.Chrome_150, cloak.TransportOptions{InsecureSkipVerify: true})
+		defer h3Stress.CloseIdleConnections()
+		h3StressClient := &http.Client{Transport: h3Stress, Timeout: 5 * time.Second}
+		for i := 0; i < 2; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
+					m := []string{"GET", "POST"}[rand.Intn(2)]
+					var body io.Reader
+					if m == "POST" {
+						b, _ := json.Marshal(map[string]any{"h3": true, "n": rand.Intn(100)})
+						body = bytes.NewReader(b)
+					}
+					req, _ := http.NewRequest(m, h3URL+"/any", body)
+					req.Header.Set("User-Agent", "stress-h3")
+					start := time.Now()
+					resp, err := h3StressClient.Do(req)
+					recordLatency(time.Since(start))
+					totalReq.Add(1)
+					if err != nil {
+						totalFail.Add(1)
+						incFail("h3: " + err.Error())
+					} else {
+						// MUST drain the body before Close — otherwise the
+						// connection can't be reused and setRequestCancel
+						// goroutines leak (classic net/http pitfall).
+						io.Copy(io.Discard, resp.Body)
+						resp.Body.Close()
+						totalOK.Add(1)
+						incStatus(resp.StatusCode)
+					}
 				}
-				m := []string{"GET", "POST"}[rand.Intn(2)]
-				var body io.Reader
-				if m == "POST" {
-					b, _ := json.Marshal(map[string]any{"h3": true, "n": rand.Intn(100)})
-					body = bytes.NewReader(b)
-				}
-				req, _ := http.NewRequest(m, h3URL+"/any", body)
-				req.Header.Set("User-Agent", "stress-h3")
-				start := time.Now()
-				resp, err := h3StressClient.Do(req)
-				recordLatency(time.Since(start))
-				totalReq.Add(1)
-				if err != nil {
-					totalFail.Add(1)
-					incFail("h3: " + err.Error())
-				} else {
-					resp.Body.Close()
-					totalOK.Add(1)
-					incStatus(resp.StatusCode)
-				}
-			}
-		}()
+			}()
+		}
 	}
 
 	monitor := time.NewTicker(60 * time.Second)
