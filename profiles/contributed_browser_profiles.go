@@ -625,6 +625,31 @@ var Firefox_146_PSK = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
+	http3Settings: map[uint64]uint64{
+		1:         65536, // QPACK_MAX_TABLE_CAPACITY
+		7:         20,    // QPACK_BLOCKED_STREAMS
+		727725890: 0,     // Reserved/GREASE setting
+		16765559:  1,     // Reserved/GREASE setting
+		0x33:      1,     // H3_DATAGRAM (51)
+		8:         1,     // ENABLE_CONNECT_PROTOCOL
+	},
+	http3SettingsOrder: []uint64{
+		1,         // QPACK_MAX_TABLE_CAPACITY
+		7,         // QPACK_BLOCKED_STREAMS
+		727725890, // Reserved/GREASE setting
+		16765559,  // Reserved/GREASE setting
+		0x33,      // H3_DATAGRAM
+		8,         // ENABLE_CONNECT_PROTOCOL
+	},
+	http3PriorityParam: 0,
+	http3PseudoHeaderOrder: []string{
+		":method",
+		":scheme",
+		":authority",
+		":path",
+	},
+	http3SendGreaseFrames: true,
+
 	headerPriority: &PriorityParam{
 		StreamDep: 0,
 		Exclusive: false,
@@ -760,6 +785,31 @@ var Firefox_135 = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
+	http3Settings: map[uint64]uint64{
+		1:         65536, // QPACK_MAX_TABLE_CAPACITY
+		7:         20,    // QPACK_BLOCKED_STREAMS
+		727725890: 0,     // Reserved/GREASE setting
+		16765559:  1,     // Reserved/GREASE setting
+		0x33:      1,     // H3_DATAGRAM (51)
+		8:         1,     // ENABLE_CONNECT_PROTOCOL
+	},
+	http3SettingsOrder: []uint64{
+		1,         // QPACK_MAX_TABLE_CAPACITY
+		7,         // QPACK_BLOCKED_STREAMS
+		727725890, // Reserved/GREASE setting
+		16765559,  // Reserved/GREASE setting
+		0x33,      // H3_DATAGRAM
+		8,         // ENABLE_CONNECT_PROTOCOL
+	},
+	http3PriorityParam: 0,
+	http3PseudoHeaderOrder: []string{
+		":method",
+		":scheme",
+		":authority",
+		":path",
+	},
+	http3SendGreaseFrames: true,
+
 }
 
 var Firefox_133 = ClientProfile{
@@ -889,6 +939,31 @@ var Firefox_133 = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
+	http3Settings: map[uint64]uint64{
+		1:         65536, // QPACK_MAX_TABLE_CAPACITY
+		7:         20,    // QPACK_BLOCKED_STREAMS
+		727725890: 0,     // Reserved/GREASE setting
+		16765559:  1,     // Reserved/GREASE setting
+		0x33:      1,     // H3_DATAGRAM (51)
+		8:         1,     // ENABLE_CONNECT_PROTOCOL
+	},
+	http3SettingsOrder: []uint64{
+		1,         // QPACK_MAX_TABLE_CAPACITY
+		7,         // QPACK_BLOCKED_STREAMS
+		727725890, // Reserved/GREASE setting
+		16765559,  // Reserved/GREASE setting
+		0x33,      // H3_DATAGRAM
+		8,         // ENABLE_CONNECT_PROTOCOL
+	},
+	http3PriorityParam: 0,
+	http3PseudoHeaderOrder: []string{
+		":method",
+		":scheme",
+		":authority",
+		":path",
+	},
+	http3SendGreaseFrames: true,
+
 }
 
 var Chrome_130_PSK = ClientProfile{
@@ -997,6 +1072,25 @@ var Chrome_130_PSK = ClientProfile{
 		":path",
 	},
 	connectionFlow: 15663105,
+	http3Settings: map[uint64]uint64{
+		1: 65536, // SETTINGS_QPACK_MAX_TABLE_CAPACITY
+		7: 100,   // SETTINGS_QPACK_BLOCKED_STREAMS
+	},
+	http3SettingsOrder: []uint64{
+		1,    // SETTINGS_QPACK_MAX_TABLE_CAPACITY
+		0x6,  // SETTINGS_MAX_FIELD_SECTION_SIZE
+		7,    // SETTINGS_QPACK_BLOCKED_STREAMS
+		0x33, // SETTINGS_H3_DATAGRAM
+	},
+	http3PriorityParam: 984832,
+	http3PseudoHeaderOrder: []string{
+		":method",
+		":authority",
+		":scheme",
+		":path",
+	},
+	http3SendGreaseFrames: true,
+
 }
 
 var Chrome_131_PSK = ClientProfile{
@@ -1107,6 +1201,25 @@ var Chrome_131_PSK = ClientProfile{
 		":path",
 	},
 	connectionFlow: 15663105,
+	http3Settings: map[uint64]uint64{
+		1: 65536, // SETTINGS_QPACK_MAX_TABLE_CAPACITY
+		7: 100,   // SETTINGS_QPACK_BLOCKED_STREAMS
+	},
+	http3SettingsOrder: []uint64{
+		1,    // SETTINGS_QPACK_MAX_TABLE_CAPACITY
+		0x6,  // SETTINGS_MAX_FIELD_SECTION_SIZE
+		7,    // SETTINGS_QPACK_BLOCKED_STREAMS
+		0x33, // SETTINGS_H3_DATAGRAM
+	},
+	http3PriorityParam: 984832,
+	http3PseudoHeaderOrder: []string{
+		":method",
+		":authority",
+		":scheme",
+		":path",
+	},
+	http3SendGreaseFrames: true,
+
 }
 
 var Chrome_131 = ClientProfile{
@@ -1216,6 +1329,25 @@ var Chrome_131 = ClientProfile{
 		":path",
 	},
 	connectionFlow: 15663105,
+	http3Settings: map[uint64]uint64{
+		1: 65536, // SETTINGS_QPACK_MAX_TABLE_CAPACITY
+		7: 100,   // SETTINGS_QPACK_BLOCKED_STREAMS
+	},
+	http3SettingsOrder: []uint64{
+		1,    // SETTINGS_QPACK_MAX_TABLE_CAPACITY
+		0x6,  // SETTINGS_MAX_FIELD_SECTION_SIZE
+		7,    // SETTINGS_QPACK_BLOCKED_STREAMS
+		0x33, // SETTINGS_H3_DATAGRAM
+	},
+	http3PriorityParam: 984832,
+	http3PseudoHeaderOrder: []string{
+		":method",
+		":authority",
+		":scheme",
+		":path",
+	},
+	http3SendGreaseFrames: true,
+
 }
 
 var Firefox_132 = ClientProfile{
@@ -1347,6 +1479,31 @@ var Firefox_132 = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
+	http3Settings: map[uint64]uint64{
+		1:         65536, // QPACK_MAX_TABLE_CAPACITY
+		7:         20,    // QPACK_BLOCKED_STREAMS
+		727725890: 0,     // Reserved/GREASE setting
+		16765559:  1,     // Reserved/GREASE setting
+		0x33:      1,     // H3_DATAGRAM (51)
+		8:         1,     // ENABLE_CONNECT_PROTOCOL
+	},
+	http3SettingsOrder: []uint64{
+		1,         // QPACK_MAX_TABLE_CAPACITY
+		7,         // QPACK_BLOCKED_STREAMS
+		727725890, // Reserved/GREASE setting
+		16765559,  // Reserved/GREASE setting
+		0x33,      // H3_DATAGRAM
+		8,         // ENABLE_CONNECT_PROTOCOL
+	},
+	http3PriorityParam: 0,
+	http3PseudoHeaderOrder: []string{
+		":method",
+		":scheme",
+		":authority",
+		":path",
+	},
+	http3SendGreaseFrames: true,
+
 }
 
 var Firefox_123 = ClientProfile{
@@ -1452,6 +1609,31 @@ var Firefox_123 = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
+	http3Settings: map[uint64]uint64{
+		1:         65536, // QPACK_MAX_TABLE_CAPACITY
+		7:         20,    // QPACK_BLOCKED_STREAMS
+		727725890: 0,     // Reserved/GREASE setting
+		16765559:  1,     // Reserved/GREASE setting
+		0x33:      1,     // H3_DATAGRAM (51)
+		8:         1,     // ENABLE_CONNECT_PROTOCOL
+	},
+	http3SettingsOrder: []uint64{
+		1,         // QPACK_MAX_TABLE_CAPACITY
+		7,         // QPACK_BLOCKED_STREAMS
+		727725890, // Reserved/GREASE setting
+		16765559,  // Reserved/GREASE setting
+		0x33,      // H3_DATAGRAM
+		8,         // ENABLE_CONNECT_PROTOCOL
+	},
+	http3PriorityParam: 0,
+	http3PseudoHeaderOrder: []string{
+		":method",
+		":scheme",
+		":authority",
+		":path",
+	},
+	http3SendGreaseFrames: true,
+
 	priorities: []Priority{
 		{StreamID: 3, PriorityParam: PriorityParam{
 			StreamDep: 0,
@@ -1590,6 +1772,31 @@ var Firefox_120 = ClientProfile{
 		":scheme",
 	},
 	connectionFlow: 12517377,
+	http3Settings: map[uint64]uint64{
+		1:         65536, // QPACK_MAX_TABLE_CAPACITY
+		7:         20,    // QPACK_BLOCKED_STREAMS
+		727725890: 0,     // Reserved/GREASE setting
+		16765559:  1,     // Reserved/GREASE setting
+		0x33:      1,     // H3_DATAGRAM (51)
+		8:         1,     // ENABLE_CONNECT_PROTOCOL
+	},
+	http3SettingsOrder: []uint64{
+		1,         // QPACK_MAX_TABLE_CAPACITY
+		7,         // QPACK_BLOCKED_STREAMS
+		727725890, // Reserved/GREASE setting
+		16765559,  // Reserved/GREASE setting
+		0x33,      // H3_DATAGRAM
+		8,         // ENABLE_CONNECT_PROTOCOL
+	},
+	http3PriorityParam: 0,
+	http3PseudoHeaderOrder: []string{
+		":method",
+		":scheme",
+		":authority",
+		":path",
+	},
+	http3SendGreaseFrames: true,
+
 	headerPriority: &PriorityParam{
 		StreamDep: 13,
 		Exclusive: false,
