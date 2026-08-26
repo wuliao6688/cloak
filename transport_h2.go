@@ -39,6 +39,8 @@ type Transport struct {
 	serverNameOverwrite  string
 	insecureSkipVerify   bool
 	pinningHosts         map[string][]string // host → allowed SHA-256 pins (OkHttp-style)
+	dialContext          func(ctx context.Context, network, addr string) (net.Conn, error)
+	localAddr            net.Addr
 
 	// h2Disabled tracks hosts that don't support H2.
 	// Map key: "host:port" → true.
@@ -82,6 +84,17 @@ type TransportOptions struct {
 	// Mismatch → handshake fails with a pinning error. This is the
 	// OkHttp-style pinning used by mobile apps to block MITM.
 	PinningHosts map[string][]string // host → allowed SHA-256 pins
+
+	// DialContext, when set, replaces the default net.Dialer for all TCP
+	// connects (TLS and plain HTTP). Use it for custom DNS resolution,
+	// SOCKS/HTTP tunneling at the socket level, or traffic routing.
+	// Signature matches net.Dialer.DialContext.
+	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+
+	// LocalAddr, when set, binds outgoing connections to this local
+	// address (multi-NIC / source-IP selection). Ignored when DialContext
+	// is provided.
+	LocalAddr net.Addr
 }
 
 // NewTransport creates a Transport using the given profile.
@@ -98,6 +111,8 @@ func NewTransportWithOptions(profile profiles.ClientProfile, opts TransportOptio
 		serverNameOverwrite:  opts.ServerNameOverwrite,
 		insecureSkipVerify:   opts.InsecureSkipVerify,
 		pinningHosts:         opts.PinningHosts,
+		dialContext:          opts.DialContext,
+		localAddr:            opts.LocalAddr,
 		debugLog:             log.New(io.Discard, "", 0),
 	}
 
@@ -114,6 +129,14 @@ func NewTransportWithOptions(profile profiles.ClientProfile, opts TransportOptio
 	}
 	if opts.Proxy != nil {
 		t.h1p.Proxy = opts.Proxy
+	}
+	if opts.DialContext != nil {
+		t.h1p.DialContext = opts.DialContext
+	} else if opts.LocalAddr != nil {
+		t.h1p.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			d := &net.Dialer{LocalAddr: opts.LocalAddr}
+			return d.DialContext(ctx, network, addr)
+		}
 	}
 
 	// HTTPS with HTTP/2 (primary).
@@ -291,6 +314,19 @@ func (t *Transport) dialTLS(ctx context.Context, network, addr string) (net.Conn
 	return t.dialTLSWithH1(ctx, network, addr, false)
 }
 
+// dial establishes a TCP connection using the configured dialer.
+// Priority: custom DialContext > net.Dialer with LocalAddr > default.
+func (t *Transport) dial(ctx context.Context, dialCtx func(ctx context.Context, network, addr string) (net.Conn, error), localAddr net.Addr, network, addr string) (net.Conn, error) {
+	if dialCtx != nil {
+		return dialCtx(ctx, network, addr)
+	}
+	d := &net.Dialer{}
+	if localAddr != nil {
+		d.LocalAddr = localAddr
+	}
+	return d.DialContext(ctx, network, addr)
+}
+
 // dialTLSH1 is like dialTLS but forces HTTP/1.1 ALPN (no "h2").
 // Used by the H1 fallback transport to avoid the server sending H2
 // frames to an H1.1 client. Without this, Akamai and similar CDNs
@@ -305,10 +341,11 @@ func (t *Transport) dialTLSWithH1(ctx context.Context, network, addr string, for
 	randomOrder := t.randomExtensionOrder
 	sniOverride := t.serverNameOverwrite
 	insecure := t.insecureSkipVerify
+	dialCtx := t.dialContext
+	localAddr := t.localAddr
 	t.profileMu.RUnlock()
 
-	dialer := &net.Dialer{}
-	rawConn, err := dialer.DialContext(ctx, network, addr)
+	rawConn, err := t.dial(ctx, dialCtx, localAddr, network, addr)
 	if err != nil {
 		return nil, fmt.Errorf("cloak: dial: %w", err)
 	}

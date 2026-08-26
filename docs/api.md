@@ -31,7 +31,27 @@ type TransportOptions struct {
 	Proxy                func(*http.Request) (*url.URL, error) // HTTP 代理
 	InsecureSkipVerify   bool                        // 跳过证书验证
 	PinningHosts         map[string][]string         // 证书 pinning(OkHttp 风格)
+	DialContext          func(ctx, network, addr) (net.Conn, error) // 自定义拨号
+	LocalAddr            net.Addr                    // 本地源地址绑定(多网卡)
 }
+```
+
+### 自定义 Dial / 本地地址绑定
+
+```go
+// 自定义 DNS / SOCKS / 流量路由: 替换底层 socket 拨号
+tr := cloak.NewTransportWithOptions(profiles.Chrome_150, cloak.TransportOptions{
+	DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		// 例: 强制走指定出口 / 自定义 DNS 解析
+		d := &net.Dialer{}
+		return d.DialContext(ctx, network, resolvedAddr)
+	},
+})
+
+// 多网卡: 指定出站源 IP
+tr := cloak.NewTransportWithOptions(profiles.Chrome_150, cloak.TransportOptions{
+	LocalAddr: &net.TCPAddr{IP: net.IPv4(192, 168, 1, 10)},
+})
 ```
 
 ### 证书 Pinning（防 MITM）
@@ -110,6 +130,24 @@ tr := cloak.NewTransportWithOptions(profiles.Chrome_150, cloak.TransportOptions{
 | `SetCookies(cookies...)` | Cookie |
 | `SetBasicAuth(u, p)` / `SetBearerAuthToken(t)` | 认证 |
 | `SetInsecureSkipVerify(bool)` | 跳过证书验证（穿透包装链） |
+| `SetOutputFile(path)` | 响应落盘 |
+| `SetOutput(io.Writer)` | 响应写流 |
+
+### 响应编码（charset 自动解码）
+
+`Response.String()` / `ToString()` 会根据 `Content-Type` 的 charset 自动把
+非 UTF-8 响应解码为 UTF-8：
+
+```go
+// 韩文站点(EUC-KR): 无需手动转码
+resp, _ := cloak.ImpersonateRequest(profiles.Chrome_150).Get("https://korean-site.com/")
+fmt.Println(resp.String()) // 已是 UTF-8
+
+// 中文站点(GBK) / 日文站点(Shift_JIS) 同样自动处理
+```
+
+支持：**EUC-KR / GBK / GB2312 / Big5 / Shift_JIS / EUC-JP / ISO-2022-JP /
+ISO-8859-* / windows-125x / UTF-16/32**
 
 ### 结果处理
 
