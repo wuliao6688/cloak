@@ -246,6 +246,13 @@ func (t *Transport) setInsecureSkipVerify(v bool) {
 	}
 }
 
+// SetInsecureSkipVerify toggles TLS certificate verification on all
+// underlying transports (h2/h1). Public so it can be reached through
+// wrapper round trippers (HeaderRoundTripper, customHeaderRoundTripper).
+func (t *Transport) SetInsecureSkipVerify(v bool) {
+	t.setInsecureSkipVerify(v)
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && searchSub(s, substr)
 }

@@ -241,6 +241,11 @@ func (c *customHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response,
 	return c.inner.RoundTrip(req)
 }
 
+// Unwrap exposes the inner transport for option setters.
+func (c *customHeaderRoundTripper) Unwrap() http.RoundTripper {
+	return c.inner
+}
+
 // ─── SelfCheck ────────────────────────────────────────────────────────────
 
 // FingerprintInfo holds the result of a TLS fingerprint self-check.

@@ -200,9 +200,31 @@ func (r *Request) SetPathParams(params map[string]string) *Request {
 	return r
 }
 
+// InsecureSkipVerrifier is implemented by transports that can toggle
+// TLS certificate verification at runtime (tlsgateway.Transport).
+type InsecureSkipVerrifier interface {
+	SetInsecureSkipVerify(v bool)
+}
+
 // SetInsecureSkipVerify disables TLS certificate verification.
 // Equivalent to req's EnableInsecureSkipVerify().
+// Works through the tlsgateway.Transport (and its wrappers) — falls back
+// to the standard http.Transport path for plain net/http transports.
 func (r *Request) SetInsecureSkipVerify(skip bool) *Request {
+	rt := r.client.Transport
+	// Unwrap HeaderRoundTripper / customHeaderRoundTripper / ordered headers.
+	for {
+		switch t := rt.(type) {
+		case InsecureSkipVerrifier:
+			t.SetInsecureSkipVerify(skip)
+			return r
+		case interface{ Unwrap() http.RoundTripper }:
+			rt = t.Unwrap()
+		default:
+			goto fallback
+		}
+	}
+fallback:
 	if tr, ok := r.client.Transport.(*http.Transport); ok {
 		if tr.TLSClientConfig == nil { tr.TLSClientConfig = &tls.Config{} }
 		tr.TLSClientConfig.InsecureSkipVerify = skip

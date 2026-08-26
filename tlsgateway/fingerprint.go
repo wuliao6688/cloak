@@ -415,6 +415,11 @@ type OrderedHeadersRoundTripper struct {
 	orderMap          map[string]int
 }
 
+// Unwrap exposes the inner transport for option setters.
+func (o *OrderedHeadersRoundTripper) Unwrap() http.RoundTripper {
+	return o.transport
+}
+
 func NewOrderedHeadersRoundTripper(transport http.RoundTripper, headerOrder []string) *OrderedHeadersRoundTripper {
 	return NewOrderedHeadersRoundTripperFull(transport, headerOrder, nil)
 }

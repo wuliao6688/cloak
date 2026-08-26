@@ -39,6 +39,12 @@ func (h *HeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	return h.transport.RoundTrip(req)
 }
 
+// Unwrap exposes the inner transport so option setters (e.g.
+// SetInsecureSkipVerify) can reach the tlsgateway.Transport underneath.
+func (h *HeaderRoundTripper) Unwrap() http.RoundTripper {
+	return h.transport
+}
+
 // browserHeaders returns browser-appropriate HTTP headers for the profile.
 func browserHeaders(profile profiles.ClientProfile) map[string]string {
 	// If the user already sets their own headers, don't override.
