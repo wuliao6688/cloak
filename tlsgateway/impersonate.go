@@ -28,6 +28,19 @@ func Impersonate(profile profiles.ClientProfile) *http.Client {
 	return &http.Client{Transport: htr, Timeout: 30 * time.Second}
 }
 
+// ImpersonateH3 returns an HTTP client that races HTTP/3 (QUIC) against
+// HTTP/2 — Chrome-style "Happy Eyeballs". The H3 leg carries the full
+// browser fingerprint: uTLS ClientHelloID injected into the QUIC TLS
+// handshake, plus H3 SETTINGS/Priority/pseudo-header-order/GREASE.
+//
+// For hosts that don't support QUIC (UDP blocked, no alt-svc:h3), it
+// transparently falls back to H2 (and H1.1 when the server lacks H2).
+func ImpersonateH3(profile profiles.ClientProfile) *http.Client {
+	tr := NewH3RaceTransport(profile)
+	htr := NewHeaderRoundTripper(tr, profile)
+	return &http.Client{Transport: htr, Timeout: 30 * time.Second}
+}
+
 // ImpersonateChain returns a builder for chain-based configuration.
 func ImpersonateChain(profile profiles.ClientProfile) *ChainBuilder {
 	tr := NewTransport(profile)
@@ -55,6 +68,7 @@ type ChainBuilder struct {
 	headers       map[string]string
 	orderedHdrs   bool
 	h2Fingerprint *H2Fingerprint
+	enableH3      bool
 }
 
 // SetUserAgent overrides the browser User-Agent.
@@ -165,9 +179,26 @@ func (cb *ChainBuilder) AsRandom() *ChainBuilder {
 	return cb
 }
 
+// EnableH3 enables HTTP/3 (QUIC) with Chrome-style H2-vs-H3 protocol
+// racing. The H3 leg carries the full browser fingerprint (QUIC TLS
+// ClientHelloID + H3 SETTINGS/Priority/pseudo-header/GREASE), and hosts
+// without QUIC transparently fall back to H2/H1.1.
+func (cb *ChainBuilder) EnableH3() *ChainBuilder {
+	cb.enableH3 = true
+	return cb
+}
+
 // Build creates the impersonated http.Client.
 func (cb *ChainBuilder) Build() *http.Client {
-	var rt http.RoundTripper = cb.tr // Transport already injects browser headers
+	var rt http.RoundTripper
+
+	// H3 racing wraps the base transport (browser headers are injected
+	// by both legs internally).
+	if cb.enableH3 {
+		rt = NewH3RaceTransport(cb.profile)
+	} else {
+		rt = cb.tr
+	}
 
 	// Get browser fingerprint for header ordering.
 	name := cb.profile.GetClientHelloStr()
