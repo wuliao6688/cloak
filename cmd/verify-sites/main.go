@@ -88,7 +88,9 @@ func main() {
 			r := siteResult{URL: s.URL, WAF: s.WAF}
 			start := time.Now()
 			resp, err := client.Get(s.URL)
-			r.Proto = resp.Proto
+			if resp != nil {
+				r.Proto = resp.Proto
+			}
 			if resp != nil {
 				r.Status = resp.StatusCode
 				r.CF = resp.Header.Get("cf-ray")
@@ -133,7 +135,6 @@ func main() {
 			if err != nil {
 				r.Err = err.Error()
 			}
-			r.Proto = resp.Proto
 			r.URL = s.URL
 			r.WAF = s.WAF + "(" + r.WAF + ")"
 			_ = start
