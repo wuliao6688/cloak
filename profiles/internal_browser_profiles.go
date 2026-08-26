@@ -133,7 +133,6 @@ var Chrome_150_PSK = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_150 = ClientProfile{
@@ -264,7 +263,6 @@ var Chrome_150 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_146_PSK = ClientProfile{
@@ -394,7 +392,6 @@ var Chrome_146_PSK = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_146 = ClientProfile{
@@ -523,7 +520,6 @@ var Chrome_146 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_144_PSK = ClientProfile{
@@ -908,7 +904,6 @@ var Chrome_133_PSK = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_133 = ClientProfile{
@@ -1037,7 +1032,6 @@ var Chrome_133 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_117 = ClientProfile{
@@ -1158,7 +1152,6 @@ var Chrome_117 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_124 = ClientProfile{
@@ -1281,7 +1274,6 @@ var Chrome_124 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_120 = ClientProfile{
@@ -1402,7 +1394,6 @@ var Chrome_120 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_112 = ClientProfile{
@@ -1446,7 +1437,6 @@ var Chrome_112 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_116_PSK = ClientProfile{
@@ -1490,7 +1480,6 @@ var Chrome_116_PSK = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_116_PSK_PQ = ClientProfile{
@@ -1534,7 +1523,6 @@ var Chrome_116_PSK_PQ = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_111 = ClientProfile{
@@ -1578,7 +1566,6 @@ var Chrome_111 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_110 = ClientProfile{
@@ -1622,7 +1609,6 @@ var Chrome_110 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_109 = ClientProfile{
@@ -1666,7 +1652,6 @@ var Chrome_109 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_108 = ClientProfile{
@@ -1710,7 +1695,6 @@ var Chrome_108 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_107 = ClientProfile{
@@ -1754,7 +1738,6 @@ var Chrome_107 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_106 = ClientProfile{
@@ -1798,7 +1781,6 @@ var Chrome_106 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_105 = ClientProfile{
@@ -1840,7 +1822,6 @@ var Chrome_105 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_104 = ClientProfile{
@@ -1882,7 +1863,6 @@ var Chrome_104 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_103 = ClientProfile{
@@ -1924,7 +1904,6 @@ var Chrome_103 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Safari_15_6_1 = ClientProfile{
@@ -2403,8 +2382,8 @@ var Safari_IOS_18_0 = ClientProfile{
 		SettingEnablePush:           0,
 		SettingMaxConcurrentStreams: 100,
 		SettingInitialWindowSize:    2097152,
-		0x8:                               1,
-		0x9:                               1,
+		0x8:                         1,
+		0x9:                         1,
 	},
 	settingsOrder: []SettingID{
 		SettingEnablePush,
@@ -3184,7 +3163,6 @@ var Opera_90 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Opera_91 = ClientProfile{
@@ -3226,7 +3204,6 @@ var Opera_91 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Opera_89 = ClientProfile{
@@ -3268,7 +3245,6 @@ var Opera_89 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 // Brave_146 is a TLS client profile for Brave Browser v146 (Chromium 146 based).
@@ -3409,7 +3385,6 @@ var Brave_146 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 // Brave_146_PSK is a TLS client profile for Brave Browser v146 with PSK (Pre-Shared Key)
@@ -3548,5 +3523,4 @@ var Brave_146_PSK = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }

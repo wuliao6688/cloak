@@ -809,7 +809,6 @@ var Firefox_135 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Firefox_133 = ClientProfile{
@@ -963,7 +962,6 @@ var Firefox_133 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_130_PSK = ClientProfile{
@@ -1090,7 +1088,6 @@ var Chrome_130_PSK = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_131_PSK = ClientProfile{
@@ -1219,7 +1216,6 @@ var Chrome_131_PSK = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Chrome_131 = ClientProfile{
@@ -1347,7 +1343,6 @@ var Chrome_131 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Firefox_132 = ClientProfile{
@@ -1503,7 +1498,6 @@ var Firefox_132 = ClientProfile{
 		":path",
 	},
 	http3SendGreaseFrames: true,
-
 }
 
 var Firefox_123 = ClientProfile{
