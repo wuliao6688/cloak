@@ -467,7 +467,21 @@ func main() {
 	results := make([]FPCheck, 0)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 4)
+	sem := make(chan struct{}, 2) // low concurrency: transparent proxy cold-starts first conn
+
+	// Warm-up: the local transparent proxy MITM-checks the FIRST TLS
+	// connection from a fresh process (10-15s stall) then fast-paths the
+	// rest. Without a warm-up every platform looks like a handshake
+	// timeout/EOF even though fingerprints are fine.
+	if !*jsonFlag {
+		fmt.Println("warm-up (transparent proxy cold start)…")
+	}
+	if wt, err := profiles.ResolveClientProfileStrict(keys[0]); err == nil {
+		tr := cloak.NewTransport(wt)
+		c := &http.Client{Transport: tr, Timeout: 30 * time.Second}
+		_, _ = c.Get("https://tls.peet.ws/api/all")
+		tr.CloseIdleConnections()
+	}
 
 	for _, key := range keys {
 		profile, err := profiles.ResolveClientProfileStrict(key)
