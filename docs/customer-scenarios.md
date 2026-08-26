@@ -24,9 +24,9 @@
 
 | # | 问题 | 来源 | 描述 |
 |---|---|---|---|
-| A1 | **并发崩溃** | cloak #53 | 100 并发下 nil pointer dereference |
-| A2 | **长时间运行崩溃** | cloak #71 | 运行数小时后 crash（fhttp setRequestCancel） |
-| A3 | **无超时挂起** | cloak #33 | transport 没有 timeout，请求永久挂起 |
+| A1 | **并发崩溃** | 上游 tls-client #53 | 100 并发下 nil pointer dereference |
+| A2 | **长时间运行崩溃** | 上游 tls-client #71 | 运行数小时后 crash（fhttp setRequestCancel） |
+| A3 | **无超时挂起** | 上游 tls-client #33 | transport 没有 timeout，请求永久挂起 |
 | A4 | **流式响应卡死** | curl_cffi #141 | stream=True 各种场景卡死 |
 | A5 | **长跑后无响应** | curl_cffi #578 | 8+ 小时后挂起，超时/异常都不触发 |
 | A6 | **轮询容易超时** | curl_cffi #106 | 轮询请求超时频率高于 requests |
@@ -35,47 +35,47 @@
 
 | # | 问题 | 来源 | 描述 |
 |---|---|---|---|
-| B1 | **TLS unexpected message** | cloak #6 | 访问 google.com 报错（utls 兼容性） |
-| B2 | **TLS illegal parameter** | cloak #185 | Ubuntu 22.04 特定环境握手失败 |
+| B1 | **TLS unexpected message** | 上游 tls-client #6 | 访问 google.com 报错（utls 兼容性） |
+| B2 | **TLS illegal parameter** | 上游 tls-client #185 | Ubuntu 22.04 特定环境握手失败 |
 | B3 | **TLSFingerprint 丢失** | req #1 | 首个请求后指纹失效（状态泄漏） |
 | B4 | **移动端指纹缺口** | curl_cffi #434 | Chrome v130 后无 Android TLS 指纹 |
-| B5 | **JA3 构建 Spec 报错** | cloak #7 | 用 JA3 构造画像失败 |
-| B6 | **自定义签名算法** | cloak #88 | iOS App 抓包含 0x0301/0x0303 等算法无法复制 |
+| B5 | **JA3 构建 Spec 报错** | 上游 tls-client #7 | 用 JA3 构造画像失败 |
+| B6 | **自定义签名算法** | 上游 tls-client #88 | iOS App 抓包含 0x0301/0x0303 等算法无法复制 |
 
 ### C. HTTP 行为类
 
 | # | 问题 | 来源 | 描述 |
 |---|---|---|---|
-| C1 | **POST 返回 400** | cloak #147 | GET 正常但 POST 全部 400 Bad Gateway |
-| C2 | **重定向无限循环** | cloak #14 | WithNotFollowRedirects 反而跟随；httpbin cookies 卡死 |
-| C3 | **gzip 响应乱码** | cloak #32 | Accept-Encoding 设置后 body 是乱码 |
-| C4 | **响应协议头大小写** | cloak #119 | HTTP/2.0 vs http/2.0 case 问题 |
-| C5 | **protobuf 字节错乱** | cloak #120 | 发送/接收 protobuf 时多出字节 |
+| C1 | **POST 返回 400** | 上游 tls-client #147 | GET 正常但 POST 全部 400 Bad Gateway |
+| C2 | **重定向无限循环** | 上游 tls-client #14 | WithNotFollowRedirects 反而跟随；httpbin cookies 卡死 |
+| C3 | **gzip 响应乱码** | 上游 tls-client #32 | Accept-Encoding 设置后 body 是乱码 |
+| C4 | **响应协议头大小写** | 上游 tls-client #119 | HTTP/2.0 vs http/2.0 case 问题 |
+| C5 | **protobuf 字节错乱** | 上游 tls-client #120 | 发送/接收 protobuf 时多出字节 |
 | C6 | **digest 认证 body 为 nil** | req | 摘要认证后响应体丢失 |
 
 ### D. 网络/代理类
 
 | # | 问题 | 来源 | 描述 |
 |---|---|---|---|
-| D1 | **代理导致 EOF** | cloak #66 | 使用代理时 frequent unexpected EOF |
+| D1 | **代理导致 EOF** | 上游 tls-client #66 | 使用代理时 frequent unexpected EOF |
 | D2 | **代理 SSL 版本错误** | curl_cffi #6 | 带用户名密码的代理 WRONG_VERSION_NUMBER |
-| D3 | **自定义 Dial 缺失** | cloak #218/#200 | 需要自定义 socket/DNS（scraper、proxy 场景） |
-| D4 | **Dialer 类型太具体** | cloak #160 | 应改为 interface 便于扩展 |
-| D5 | **证书 pinning 通配符** | cloak #61 | 需要 OkHttp 式 *.domain 通配符 |
+| D3 | **自定义 Dial 缺失** | 上游 tls-client #218/#200 | 需要自定义 socket/DNS（scraper、proxy 场景） |
+| D4 | **Dialer 类型太具体** | 上游 tls-client #160 | 应改为 interface 便于扩展 |
+| D5 | **证书 pinning 通配符** | 上游 tls-client #61 | 需要 OkHttp 式 *.domain 通配符 |
 | D6 | **证书路径问题** | curl_cffi #104 | CAfile 路径错误导致 ErrCode 77 |
 
 ### E. 功能缺口类
 
 | # | 问题 | 来源 | 描述 |
 |---|---|---|---|
-| E1 | **HTTP/3 支持** | cloak #104/#189 | QUIC 时代必须（本项目已实现 ✅） |
-| E2 | **UA 跟随画像** | cloak #108 | 用浏览器画像时应自动匹配 UA |
-| E3 | **请求前/后钩子** | cloak #220 | prerequest/postrequest hooks |
-| E4 | **响应落盘** | cloak #21 | 大响应直接写文件而非内存 |
-| E5 | **优先级帧顺序** | cloak #17 | Firefox WINDOW_UPDATE 帧顺序不对 |
-| E6 | **自定义流 ID** | cloak #205 | AllowHTTP、StreamID 值设置 |
-| E7 | **本地地址绑定** | cloak #52 | WithLocalAddr 多网卡场景 |
-| E8 | **编码支持** | cloak #207 | EUC-KR 韩文编码 |
+| E1 | **HTTP/3 支持** | 上游 tls-client #104/#189 | QUIC 时代必须（本项目已实现 ✅） |
+| E2 | **UA 跟随画像** | 上游 tls-client #108 | 用浏览器画像时应自动匹配 UA |
+| E3 | **请求前/后钩子** | 上游 tls-client #220 | prerequest/postrequest hooks |
+| E4 | **响应落盘** | 上游 tls-client #21 | 大响应直接写文件而非内存 |
+| E5 | **优先级帧顺序** | 上游 tls-client #17 | Firefox WINDOW_UPDATE 帧顺序不对 |
+| E6 | **自定义流 ID** | 上游 tls-client #205 | AllowHTTP、StreamID 值设置 |
+| E7 | **本地地址绑定** | 上游 tls-client #52 | WithLocalAddr 多网卡场景 |
+| E8 | **编码支持** | 上游 tls-client #207 | EUC-KR 韩文编码 |
 
 ---
 
@@ -136,8 +136,8 @@
 | C4 协议头大小写 | 标准 net/http 处理 | ✅ |
 | C5 protobuf 字节错乱 | 无 fork 的 fhttp，body 直通 | ✅ 无上游 fhttp bug |
 | C6 digest 认证 | SetBasicAuth/SetBearerAuthToken | ✅ |
-| D3 自定义 Dial | `TransportOptions` 可扩展（当前为固定 net.Dialer） | ⚠️ 待加 |
-| D5 证书 pinning 通配符 | 未实现 | ⚠️ 待加 |
+| D3 自定义 Dial | `DialTLSContext`（transport_h2.go:106） | ✅ 已有 |
+| D5 证书 pinning 通配符 | `PinningHosts`（OkHttp 风格） | ✅ 已实现 |
 | D7 本地地址绑定 | 未实现 | ⚠️ 待加 |
 | E3 请求前后钩子 | `OnRequest` / `OnResponse` | ✅ 已实现 |
 | E4 响应落盘 | `SetOutputFile` / `SetOutput` | ✅ 已实现 |
@@ -145,6 +145,17 @@
 | E7 编码支持 | 未实现（EUC-KR） | ⚠️ 待加 |
 
 ### 4.4 本次修复
+
+**证书 Pinning 已实现**（对应 D5 待加项，2026-08-26 第二轮验证）：
+- `TransportOptions.PinningHosts` 支持精确域名 + 通配符（`*.example.com`，OkHttp 语义）
+- 正确 pin 通过 / 错误 pin 握手拒绝（MITM 阻断）
+- 测试：`TestPinningExactHost` / `TestPinningWildcard` / `TestPinningNoPinsUnchanged`
+- API 文档：docs/api.md §2
+
+**客户测试恢复**：重构时 5 个客户场景测试（gzip/重定向/超时/并发/证书穿透）
+曾被截断只剩 1 个，已恢复为完整 6 个（`customer_issues_test.go`）。
+
+
 
 **`Request.SetInsecureSkipVerify` 静默失效**（真实缺陷，对应客户 C1 类问题）：
 - 根因：类型断言 `r.client.Transport.(*http.Transport)` —— 项目实际是自定义 `cloak.Transport` 被 HeaderRoundTripper/customHeader 包装

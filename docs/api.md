@@ -30,8 +30,30 @@ type TransportOptions struct {
 	ServerNameOverwrite  string                      // SNI 覆盖
 	Proxy                func(*http.Request) (*url.URL, error) // HTTP 代理
 	InsecureSkipVerify   bool                        // 跳过证书验证
+	PinningHosts         map[string][]string         // 证书 pinning(OkHttp 风格)
 }
 ```
+
+### 证书 Pinning（防 MITM）
+
+`PinningHosts` 为指定域名启用证书固定——只信任预置的证书指纹，中间人攻击
+（伪造证书）会被拒绝。支持精确域名和通配符：
+
+```go
+// 指纹 = SHA-256(证书 DER) 的 base64
+//   sum := sha256.Sum256(cert.Raw)
+//   base64.StdEncoding.EncodeToString(sum[:])
+
+tr := cloak.NewTransportWithOptions(profiles.Chrome_150, cloak.TransportOptions{
+	PinningHosts: map[string][]string{
+		"api.example.com":  {"AbCdEfGhIjKlMnOpQrStUvWxYz1234567890ab=="}, // 精确
+		"*.example.com":    {"XyZ..."},  // 通配符: 匹配所有子域
+	},
+})
+```
+
+- pin 不匹配 → 握手失败（`cloak: pinning: certificate mismatch`）
+- 未配置 pin 的域名 → 标准证书验证不受影响
 
 ## 3. ChainBuilder（ImpersonateChain 返回值）
 

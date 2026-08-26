@@ -3,6 +3,7 @@ package cloak
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"log"
@@ -37,6 +38,7 @@ type Transport struct {
 	randomExtensionOrder bool
 	serverNameOverwrite  string
 	insecureSkipVerify   bool
+	pinningHosts         map[string][]string // host → allowed SHA-256 pins (OkHttp-style)
 
 	// h2Disabled tracks hosts that don't support H2.
 	// Map key: "host:port" → true.
@@ -68,6 +70,18 @@ type TransportOptions struct {
 	ServerNameOverwrite  string
 	Proxy                func(*http.Request) (*url.URL, error)
 	InsecureSkipVerify   bool // default: false (certificates verified)
+
+	// PinningHosts enables certificate pinning for the listed hosts.
+	// Entries may be exact ("api.example.com") or wildcard ("*.example.com",
+	// matches any subdomain). When pinned, the server certificate must
+	// match one of these hashes (SHA-256 of the DER-encoded cert):
+	//
+	//	hash := sha256.Sum256(cert.Raw)
+	//	base64.StdEncoding.EncodeToString(hash[:])
+	//
+	// Mismatch → handshake fails with a pinning error. This is the
+	// OkHttp-style pinning used by mobile apps to block MITM.
+	PinningHosts map[string][]string // host → allowed SHA-256 pins
 }
 
 // NewTransport creates a Transport using the given profile.
@@ -83,6 +97,7 @@ func NewTransportWithOptions(profile profiles.ClientProfile, opts TransportOptio
 		randomExtensionOrder: opts.RandomExtensionOrder,
 		serverNameOverwrite:  opts.ServerNameOverwrite,
 		insecureSkipVerify:   opts.InsecureSkipVerify,
+		pinningHosts:         opts.PinningHosts,
 		debugLog:             log.New(io.Discard, "", 0),
 	}
 
@@ -312,6 +327,15 @@ func (t *Transport) dialTLSWithH1(ctx context.Context, network, addr string, for
 		InsecureSkipVerify: insecure,
 		OmitEmptyPsk:       true,
 		ClientSessionCache: utls.NewLRUClientSessionCache(32),
+	}
+
+	// Certificate pinning (OkHttp-style): only intercept when the host
+	// has a pinning entry — otherwise keep standard verification.
+	if _, pinned := pinMatchesHost(t.pinningHosts, host); pinned {
+		utlsConfig.InsecureSkipVerify = true // pinning replaces chain verification
+		utlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+			return verifyPinnedCert(t.pinningHosts, host, rawCerts)
+		}
 	}
 
 	clientHelloID := profile.GetClientHelloId()
