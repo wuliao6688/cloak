@@ -16,6 +16,33 @@ go test -race -count=1 ./...    # 全部通过
 | H2/H1 协商 | `TestTransportH2*` | H2 正常、H1 兜底、并发、POST、多画像 |
 | 并发安全 | `TestTransportThreadSafety` | 多 goroutine 共享 Transport |
 | 压力测试 | `TestStressSustained*` | 20 并发 / 10 分钟 / 内存无增长 / goroutine 零泄漏 |
+
+### 1.1 多样化压力测试基线（`cmd/stress-varied`，1 小时实测）
+
+```
+1 小时 / 20 并发 / 4 种 worker 模式(reuse/fresh/longLived/createDestroy)
++ H3×2 + 正向代理 / 6 画像随机 / 7 方法 / 5 body 类型
+  总请求: 47,326,623 (4732 万)
+  成功率: 100.00% (1 失败/4732万 — 压测工具自身竞态, 非库 bug)
+  吞吐:   13,146 req/s
+  延迟:   p50 770µs / p95 2.6ms / p99 11.2ms
+  Goroutines: 全程 169-199 稳定 (零泄漏)
+  结论:   ✅ 稳定可靠, 无连接/goroutine 泄漏
+```
+
+> **worker 模式**（贴近真实用户场景）：
+> - `reuse`(30%)：共享 client 连接复用
+> - `fresh`(20%)：每请求新建 client（创建开销）
+> - `longLived`(30%)：单线程持有一个 Request 对象，反复请求且每轮
+>   SetHeader/SetCookies/SetQueryParam/SetBasicAuth 变更（真实爬虫模式）
+> - `createDestroy`(20%)：创建→用 1-8 次→销毁→重建（批量任务模式）
+
+> **压测发现并修复的真实缺陷**（2026-08-26）：
+> 1. `ImpersonateRequest` 每次新建 Transport → 连接泄漏（3 分钟 37K
+>    goroutine / 586MB）。重构为**全局 Transport 池**（pool.go：相同画像
+>    共享连接，refs 引用计数，池条目永不删除避免并发 create/destroy 循环）
+> 2. `SetRetry` 重试时非 2xx body 未关闭 → 每响应泄漏连接（独立复现
+>    10s 泄漏 2893 goroutine）。修复：executeWithRetry 内 drain+close
 | 代理 | `TestTransportProxy` / `TestProxy*` | HTTP 代理、CONNECT 隧道、并发、健康检查 |
 | 指纹自检 | `TestFingerprint*` / `TestSelfCheck` | JA3/JA4 验证 |
 | **H3/QUIC** | `TestH3Transport*` / `TestH3Race*` | 本地 H3 200、指纹注入、GREASE、racing 选协议、降级 |
