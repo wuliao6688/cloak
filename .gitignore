@@ -17,3 +17,4 @@ cffi_dist/tls_client_cffi
 fingerprint_verification_report.json
 verify-fingerprints
 verify-sites
+stress-varied
