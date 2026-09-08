@@ -21,6 +21,14 @@
 
 ## 已登记问题
 
+### [2026-09-08] DialTLSContext 跳过 ALPN 校验，导致对空 ALPN 服务器 HTTP/2 挂死
+- **分类**: 兼容性
+- **症状**: cloak 对 `channels.weixin.qq.com` 的 cgi-bin 请求挂死（15-60s `context deadline exceeded`）；而 `weixin.qq.com`/google/cloudflare 正常；CycleTLS/curl 对同一 endpoint 均正常（200 + 业务错误码）。调试显示 `handshake OK negotiated=`（ALPN 为空）。
+- **根因**: 官方 `golang.org/x/net/http2` 与 `internal/http2` fork 在设置了 `DialTLSContext`（或 `DialTLS`）时**跳过 ALPN 校验**——它假定自定义拨号器已完成协议协商。而当服务器完成 TLS 1.3 握手但不回 `h2`（空 ALPN，例如微信视频号边缘对某些 ClientHello 的行为）时，客户端仍按 HTTP/2 讲话，服务器不响应 → 连接挂起。且挂起错误是 `context deadline exceeded`，不匹配 `isProtocolError` 里的任何降级条件，故不触发 H1 回退。
+- **修复**: `transport_h2.go` 的 `DialTLSContext` 闭包与 `internal/http2/transport.go` 的 `dialTLS` 都在握手后校验协商出的 ALPN；非 `h2` 则关闭连接并返回 `http2: unexpected ALPN protocol`（该错误会被 `isProtocolError` 捕获 → 降级 HTTP/1.1）。`weixin.qq.com`/`cloudflare.com` 等正常协商 `h2` 的主机不受影响。
+- **防止复发**: 任何通过 `DialTLSContext`/`DialTLS` 提供 TLS 连接的 H2 传输，都必须自己校验协商出的协议；配套回归测试 `TestFallbackToH1WhenNoALPN` 锁定该行为。
+- **状态**: ✅已修复（commit e0ae751）
+
 ### [2026-08-26] ImpersonateRequest 每次新建 Transport 导致连接泄漏
 - **分类**: 泄漏
 - **症状**: 持续使用下泄漏 keep-alive 连接及 goroutine（3 分钟 37K goroutine / 586MB 内存暴涨）；1 小时压测触发
