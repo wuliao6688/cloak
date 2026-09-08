@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -768,11 +769,60 @@ func (t *Transport) newTLSConfig(host string) *tls.Config {
 	return cfg
 }
 
+// validateNegotiatedProtocol enforces that a connection established via a
+// user-supplied DialTLSContext/DialTLS actually negotiated HTTP/2. A server
+// that returns an empty ALPN (no h2) must not be spoken HTTP/2 to; failing
+// this check lets the caller fall back to HTTP/1.1 instead of hanging.
+func validateNegotiatedProtocol(c net.Conn) error {
+	// The connection may expose ConnectionState() returning a variety of
+	// types (crypto/tls.ConnectionState, or a uTLS fork's own ConnectionState).
+	// Read the NegotiatedProtocol field reflectively so both shapes work.
+	m := reflect.ValueOf(c).MethodByName("ConnectionState")
+	if !m.IsValid() {
+		// No ConnectionState available; cannot verify. Matches the stock
+		// http2.Transport behavior for opaque connections.
+		return nil
+	}
+	out := m.Call(nil)
+	if len(out) != 1 {
+		return nil
+	}
+	st := out[0]
+	if st.Kind() == reflect.Pointer {
+		st = st.Elem()
+	}
+	f := st.FieldByName("NegotiatedProtocol")
+	if !f.IsValid() {
+		return nil
+	}
+	p := f.String()
+	if p != NextProtoTLS {
+		return fmt.Errorf("http2: unexpected ALPN protocol %q; want %q", p, NextProtoTLS)
+	}
+	return nil
+}
+
 func (t *Transport) dialTLS(ctx context.Context, network, addr string, tlsCfg *tls.Config) (net.Conn, error) {
 	if t.DialTLSContext != nil {
-		return t.DialTLSContext(ctx, network, addr, tlsCfg)
+		c, err := t.DialTLSContext(ctx, network, addr, tlsCfg)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateNegotiatedProtocol(c); err != nil {
+			c.Close()
+			return nil, err
+		}
+		return c, nil
 	} else if t.DialTLS != nil {
-		return t.DialTLS(network, addr, tlsCfg)
+		c, err := t.DialTLS(network, addr, tlsCfg)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateNegotiatedProtocol(c); err != nil {
+			c.Close()
+			return nil, err
+		}
+		return c, nil
 	}
 
 	tlsCn, err := t.dialTLSWithContext(ctx, network, addr, tlsCfg)

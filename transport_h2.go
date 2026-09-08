@@ -97,6 +97,16 @@ type TransportOptions struct {
 	LocalAddr net.Addr
 }
 
+// negotiatedProtocol returns the TLS ALPN protocol the server selected for
+// a connection, or "" when it cannot be determined (non-uTLS conn, or the
+// server sent no ALPN extension).
+func negotiatedProtocol(c net.Conn) string {
+	if uc, ok := c.(*utls.UConn); ok {
+		return uc.ConnectionState().NegotiatedProtocol
+	}
+	return ""
+}
+
 // NewTransport creates a Transport using the given profile.
 // TLS certificate verification is enabled by default.
 func NewTransport(profile profiles.ClientProfile) *Transport {
@@ -142,7 +152,20 @@ func NewTransportWithOptions(profile profiles.ClientProfile, opts TransportOptio
 	// HTTPS with HTTP/2 (primary).
 	t.h2 = &http2.Transport{
 		DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
-			return t.dialTLS(ctx, network, addr)
+			conn, err := t.dialTLS(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+			// The stock x/net/http2 skips its ALPN check when DialTLSContext
+			// returns a conn, assuming the dialer already negotiated. A server
+			// that answers TLS 1.3 but withholds h2 (empty ALPN) — e.g. the
+			// WeChat channels edge — would then be spoken HTTP/2 to and stall
+			// forever. Enforce h2 here so the caller falls back to HTTP/1.1.
+			if p := negotiatedProtocol(conn); p != "h2" {
+				conn.Close()
+				return nil, fmt.Errorf("http2: unexpected ALPN protocol %q; want %q", p, "h2")
+			}
+			return conn, nil
 		},
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: t.insecureSkipVerify},
 	}
